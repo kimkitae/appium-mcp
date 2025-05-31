@@ -234,6 +234,24 @@ class AndroidRobot(Robot):
         # 있습니다. 보다 안정적으로 입력하기 위해 항상 Appium의 UnicodeIME와
         # 브로드캐스트 방식을 사용합니다.
 
+        old_ime: Optional[str] = None
+
+        # 현재 IME 저장 시도 (실패해도 무시)
+        try:
+            old_ime = (
+                self.adb(
+                    "shell",
+                    "settings",
+                    "get",
+                    "secure",
+                    "default_input_method",
+                )
+                .decode("utf-8")
+                .strip()
+            )
+        except Exception:
+            pass
+
         # Appium UnicodeIME 설정 시도 (실패해도 무시)
         try:
             self.adb("shell", "ime", "set", "io.appium.settings/.UnicodeIME")
@@ -251,6 +269,13 @@ class AndroidRobot(Robot):
             "msg",
             text,
         )
+
+        # 기존 IME로 복원 시도
+        if old_ime and "io.appium.settings/.UnicodeIME" not in old_ime:
+            try:
+                self.adb("shell", "ime", "set", old_ime)
+            except Exception:
+                pass
 
     
     async def press_button(self, button: Button) -> None:
