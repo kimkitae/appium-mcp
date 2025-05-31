@@ -116,6 +116,7 @@ python app.py
 ### 디바이스 제어
 - `screenshot()` - 스크린샷 캡처
 - `screen_analysis()` - 스크린샷과 페이지 소스 동시 가져오기
+- `screen_analysis_click(by, value, timeout=10)` - 화면 분석으로 요소를 기다렸다가 바로 클릭
 - `click_coordinates(x, y)` - 좌표 기반 클릭
 - `click(by, value)` - 요소 클릭
 - `swipe(start_x, start_y, end_x, end_y)` - 스와이프

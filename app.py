@@ -439,6 +439,33 @@ async def click(by: str, value: str):
     return "클릭 성공"
 
 @mcp.tool()
+async def screen_analysis_click(by: str, value: str, timeout: int = 10, interval: float = 0.5, detailed: bool = False):
+    """요소가 나타날 때까지 화면을 분석하며 발견 즉시 클릭합니다."""
+    global driver
+    end_time = time.time() + timeout
+    last_screen = ""
+    last_source = ""
+    while time.time() < end_time:
+        analysis = await screen_analysis(detailed=detailed)
+        last_screen = analysis["screenshot"]
+        last_source = analysis["page_source"]
+        try:
+            element = driver.find_element(by, value)
+            element.click()
+            return {
+                "clicked": True,
+                "screenshot": last_screen,
+                "page_source": last_source,
+            }
+        except Exception:
+            time.sleep(interval)
+    return {
+        "clicked": False,
+        "screenshot": last_screen,
+        "page_source": last_source,
+    }
+
+@mcp.tool()
 async def swipe(start_x: int, start_y: int, end_x: int, end_y: int, duration: int = 800):
     """지정한 좌표로 스와이프 (W3C Actions 사용)"""
     global driver
