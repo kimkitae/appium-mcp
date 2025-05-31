@@ -3,7 +3,7 @@ from typing import Dict, Any, List, Optional, Callable, Awaitable
 import aiohttp
 from dataclasses import dataclass
 
-from robot import (
+from .robot import (
     ActionableError, SwipeDirection, ScreenSize, ScreenElement, 
     Orientation, ScreenElementRect
 )

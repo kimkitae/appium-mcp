@@ -8,14 +8,14 @@ from mcp.server.models import InitializationOptions
 from mcp.types import Tool, TextContent, ImageContent
 from pydantic import BaseModel, Field
 
-from logger import error, trace
-from android import AndroidRobot, AndroidDeviceManager
-from robot import ActionableError, Robot
-from iphone_simulator import SimctlManager
-from ios import IosManager, IosRobot
-from png import PNG
-from image_utils import is_imagemagick_installed, Image
-from __init__ import __version__
+from .logger import error, trace
+from .android import AndroidRobot, AndroidDeviceManager
+from .robot import ActionableError, Robot
+from .iphone_simulator import SimctlManager
+from .ios import IosManager, IosRobot
+from .png import PNG
+from .image_utils import is_imagemagick_installed, Image
+from .__init__ import __version__
 
 
 def get_agent_version() -> str:

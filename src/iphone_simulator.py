@@ -5,8 +5,8 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-from webdriver_agent import WebDriverAgent
-from robot import (
+from .webdriver_agent import WebDriverAgent
+from .robot import (
     ActionableError, Button, InstalledApp, Robot, ScreenElement, 
     ScreenSize, SwipeDirection, Orientation
 )

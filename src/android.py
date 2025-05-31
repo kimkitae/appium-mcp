@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional, Literal
 from dataclasses import dataclass
 import xml.etree.ElementTree as ET
 
-from robot import (
+from .robot import (
     ActionableError, Button, InstalledApp, Robot, ScreenElement, 
     ScreenElementRect, ScreenSize, SwipeDirection, Orientation
 )
