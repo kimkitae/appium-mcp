@@ -4,8 +4,8 @@ import sys
 import json
 from mcp.server.stdio import stdio_server
 
-from server import create_mcp_server
-from logger import error
+from .server import create_mcp_server
+from .logger import error
 
 
 async def async_main():

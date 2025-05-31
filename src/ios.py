@@ -8,8 +8,8 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import secrets
 
-from webdriver_agent import WebDriverAgent
-from robot import (
+from .webdriver_agent import WebDriverAgent
+from .robot import (
     ActionableError, Button, InstalledApp, Robot, ScreenSize, 
     SwipeDirection, ScreenElement, Orientation
 )
