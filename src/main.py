@@ -8,8 +8,8 @@ from server import create_mcp_server
 from logger import error
 
 
-async def main():
-    """메인 함수"""
+async def async_main():
+    """메인 비동기 함수"""
     try:
         server = create_mcp_server()
         
@@ -23,13 +23,18 @@ async def main():
             )
             
     except Exception as e:
-        error(f"main()에서 치명적 오류 발생: {json.dumps(str(e))}")
+        error(f"async_main()에서 치명적 오류 발생: {json.dumps(str(e))}")
         sys.exit(1)
+
+
+def main() -> None:
+    """동기 진입점 함수"""
+    asyncio.run(async_main())
 
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
         error("키보드 인터럽트로 종료됨")
         sys.exit(0)
