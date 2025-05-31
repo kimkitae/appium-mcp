@@ -10,6 +10,7 @@ import logging
 import asyncio
 import sys
 import click
+import openai
 from typing import Dict, Any
 
 # 설정 파일 로드
@@ -18,6 +19,12 @@ config = {}
 if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
         config = json.load(f)
+
+# OpenAI 설정
+openai_client = openai.OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY", ""),
+    base_url=config.get("llm", {}).get("api_base")
+)
 
 # 로깅 설정
 logging.basicConfig(level=getattr(logging, config.get('logging', {}).get('level', 'INFO')))
@@ -572,6 +579,41 @@ async def long_press(by: str, value: str, duration: int = 2000):
     driver.release_actions()
     return "길게 누르기 성공"
 
+
+@mcp.tool()
+async def ask_llm(prompt: str, include_ui: bool = False):
+    """LLM에게 질문합니다. 필요 시 현재 UI 정보를 함께 전달합니다."""
+    screenshot_b64 = ""
+    page_source = ""
+    if include_ui and driver:
+        screenshot_b64 = driver.get_screenshot_as_base64()
+        page_source = await get_page_source(detailed=True)
+        prompt += f"\n\n[screenshot(base64)]: {screenshot_b64}\n[page_source]:\n{page_source}"
+
+    llm_cfg = config.get("llm", {})
+    messages = []
+    system_msg = llm_cfg.get("system_prompt")
+    if system_msg:
+        messages.append({"role": "system", "content": system_msg})
+    if current_device:
+        info = f"Device: {current_device['deviceName']} ({current_device['platform']} {current_device['osVersion']})"
+        messages.append({"role": "system", "content": info})
+    messages.append({"role": "user", "content": prompt})
+
+    try:
+        resp = await asyncio.to_thread(
+            lambda: openai_client.chat.completions.create(
+                model=llm_cfg.get("model", "gpt-4o"),
+                messages=messages,
+                max_tokens=llm_cfg.get("max_tokens", 512),
+                temperature=llm_cfg.get("temperature", 0.2),
+            )
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        logger.error(f"LLM 호출 실패: {e}")
+        return f"❌ LLM 호출 실패: {e}"
+
 @mcp.tool()
 async def disconnect():
     """현재 연결된 디바이스와의 연결을 해제하고 선택적으로 Appium 서버를 중지"""
@@ -731,6 +773,14 @@ def page_source_cmd(detailed):
 @click.option("--duration", default=2000, type=int, help="Press duration in ms")
 def long_press_cmd(by, value, duration):
     click.echo(_run_async(long_press(by, value, duration)))
+
+
+@cli.command(name="ask-llm")
+@click.argument("prompt")
+@click.option("--include-ui", is_flag=True, help="Include current UI information")
+def ask_llm_cmd(prompt, include_ui):
+    """Send a question to the configured LLM."""
+    click.echo(_run_async(ask_llm(prompt, include_ui)))
 
 
 @cli.command(name="start-automation")
