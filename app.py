@@ -10,7 +10,7 @@ import logging
 import asyncio
 import sys
 import click
-import openai
+import requests
 from typing import Dict, Any
 
 # 설정 파일 로드
@@ -20,11 +20,9 @@ if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
         config = json.load(f)
 
-# OpenAI 설정
-openai_client = openai.OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY", ""),
-    base_url=config.get("llm", {}).get("api_base")
-)
+# MCP LLM 설정
+MCP_API_BASE = config.get("llm", {}).get("api_base") or os.environ.get("MCP_API_BASE", "http://localhost:8080")
+MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 
 # 로깅 설정
 logging.basicConfig(level=getattr(logging, config.get('logging', {}).get('level', 'INFO')))
@@ -630,16 +628,22 @@ async def ask_llm(prompt: str, include_ui: bool = False):
         messages.append({"role": "system", "content": info})
     messages.append({"role": "user", "content": prompt})
 
+    payload = {
+        "model": llm_cfg.get("model", "gpt-4o"),
+        "messages": messages,
+        "max_tokens": llm_cfg.get("max_tokens", 512),
+        "temperature": llm_cfg.get("temperature", 0.2),
+    }
+    url = MCP_API_BASE.rstrip("/") + "/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {MCP_API_KEY}"} if MCP_API_KEY else {}
+
     try:
         resp = await asyncio.to_thread(
-            lambda: openai_client.chat.completions.create(
-                model=llm_cfg.get("model", "gpt-4o"),
-                messages=messages,
-                max_tokens=llm_cfg.get("max_tokens", 512),
-                temperature=llm_cfg.get("temperature", 0.2),
-            )
+            lambda: requests.post(url, json=payload, headers=headers, timeout=60)
         )
-        return resp.choices[0].message.content
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
     except Exception as e:
         logger.error(f"LLM 호출 실패: {e}")
         return f"❌ LLM 호출 실패: {e}"

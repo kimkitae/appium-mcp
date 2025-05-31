@@ -51,8 +51,8 @@ pip install -r requirements.txt
 # 설정 파일 확인 (자동 생성됨)
 cat config.json
 
-# LLM 사용을 위해 OPENAI_API_KEY 환경 변수를 설정하세요
-export OPENAI_API_KEY=your-key
+# LLM 사용을 위해 MCP_API_KEY 환경 변수를 설정하세요
+export MCP_API_KEY=your-key
 ```
 
 ## 🚀 빠른 시작
@@ -114,7 +114,7 @@ python cli.py ask-llm "로그인 버튼이 어디에 있나요?" --include-ui
         "max_tokens": 512,
         "temperature": 0.2,
         "system_prompt": "You are a helpful assistant for mobile automation.",
-        "api_base": null
+        "api_base": "http://localhost:8080"
     }
 }
 ```
