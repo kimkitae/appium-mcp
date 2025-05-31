@@ -36,6 +36,19 @@ driver = None
 current_device = None
 appium_process = None
 
+JSON_OUTPUT = os.environ.get("MCP_JSON", "0").lower() in ("1", "true")
+
+def _maybe_json(result):
+    if JSON_OUTPUT and not isinstance(result, (dict, list)):
+        return {"result": result}
+    return result
+
+def json_result(func):
+    async def wrapper(*args, **kwargs):
+        res = await func(*args, **kwargs)
+        return _maybe_json(res)
+    return wrapper
+
 def is_appium_server_running() -> bool:
     """Appium 서버가 실행 중인지 확인"""
     try:
@@ -133,6 +146,7 @@ def detect_devices() -> Dict[str, Any]:
     return devices
 
 @mcp.tool()
+@json_result
 async def auto_setup():
     """자동으로 Appium 서버를 시작하고 첫 번째 사용 가능한 디바이스에 연결"""
     logger.info("자동 설정을 시작합니다...")
@@ -189,6 +203,7 @@ async def auto_setup():
     return "연결 가능한 디바이스가 없습니다."
 
 @mcp.tool()
+@json_result
 async def list_available_devices():
     """사용 가능한 모든 디바이스 목록 조회"""
     devices = detect_devices()
@@ -211,6 +226,7 @@ async def list_available_devices():
     return result
 
 @mcp.tool()
+@json_result
 async def check_connection_status():
     """현재 연결 상태 및 서버 상태 확인"""
     status = {
@@ -228,6 +244,7 @@ async def check_connection_status():
     return result
 
 @mcp.tool()
+@json_result
 async def restart_connection():
     """현재 연결을 끊고 자동으로 다시 연결"""
     logger.info("연결을 재시작합니다...")
@@ -242,6 +259,7 @@ async def restart_connection():
     return await auto_setup()
 
 @mcp.tool()
+@json_result
 async def connect(platform: str, deviceName: str = "", udid: str = "", appPackage: str = "", appActivity: str = "", bundleId: str = ""):
     """Connect to a mobile device.
 
@@ -389,6 +407,7 @@ async def connect(platform: str, deviceName: str = "", udid: str = "", appPackag
         return f"❌ 디바이스 연결 실패: {str(e)}"
 
 @mcp.tool()
+@json_result
 async def current_device_info():
     """Return information about the currently connected device."""
     global current_device
@@ -401,11 +420,13 @@ async def current_device_info():
     )
 
 @mcp.tool()
+@json_result
 async def screenshot():
     global driver
     return driver.get_screenshot_as_base64()
 
 @mcp.tool()
+@json_result
 async def screen_analysis(detailed: bool = False):
     """빠른 화면 분석을 위해 스크린샷과 페이지 소스를 함께 반환"""
     global driver
@@ -415,6 +436,7 @@ async def screen_analysis(detailed: bool = False):
     }
 
 @mcp.tool()
+@json_result
 async def click_coordinates(x: int, y: int):
     """지정한 좌표를 탭합니다 (W3C Actions 사용)"""
     global driver
@@ -435,6 +457,7 @@ async def click_coordinates(x: int, y: int):
     return "클릭 성공"
 
 @mcp.tool()
+@json_result
 async def click(by: str, value: str):
     global driver
     element = driver.find_element(by, value)
@@ -442,6 +465,7 @@ async def click(by: str, value: str):
     return "클릭 성공"
 
 @mcp.tool()
+@json_result
 async def screen_analysis_click(by: str, value: str, timeout: int = 10, interval: float = 0.5, detailed: bool = False):
     """요소가 나타날 때까지 화면을 분석하며 발견 즉시 클릭합니다."""
     global driver
@@ -469,6 +493,7 @@ async def screen_analysis_click(by: str, value: str, timeout: int = 10, interval
     }
 
 @mcp.tool()
+@json_result
 async def swipe(start_x: int, start_y: int, end_x: int, end_y: int, duration: int = 800):
     """지정한 좌표로 스와이프 (W3C Actions 사용)"""
     global driver
@@ -490,18 +515,21 @@ async def swipe(start_x: int, start_y: int, end_x: int, end_y: int, duration: in
     return "스와이프 성공"
 
 @mcp.tool()
+@json_result
 async def is_displayed(by: str, value: str):
     global driver
     element = driver.find_element(by, value)
     return element.is_displayed()
 
 @mcp.tool()
+@json_result
 async def get_attribute(by: str, value: str, attribute: str):
     global driver
     element = driver.find_element(by, value)
     return element.get_attribute(attribute)
 
 @mcp.tool()
+@json_result
 async def activate_app(app_id: str = ""):
     """지정한 앱을 실행합니다. 앱 ID가 없으면 기본 설정을 사용합니다."""
     global driver, current_device
@@ -527,6 +555,7 @@ async def activate_app(app_id: str = ""):
         return f"❌ 앱 실행 실패: {str(e)}"
 
 @mcp.tool()
+@json_result
 async def get_page_source(detailed: bool = False):
     """페이지 소스를 가져옵니다. 간단 모드에서는 플랫폼별 설정을 활용합니다."""
     global driver, current_device
@@ -548,6 +577,7 @@ async def get_page_source(detailed: bool = False):
     return driver.page_source
 
 @mcp.tool()
+@json_result
 async def long_press(by: str, value: str, duration: int = 2000):
     """요소를 길게 누르기 (W3C Actions 사용)"""
     global driver
@@ -573,6 +603,7 @@ async def long_press(by: str, value: str, duration: int = 2000):
     return "길게 누르기 성공"
 
 @mcp.tool()
+@json_result
 async def disconnect():
     """현재 연결된 디바이스와의 연결을 해제하고 선택적으로 Appium 서버를 중지"""
     global driver, current_device
