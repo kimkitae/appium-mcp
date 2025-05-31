@@ -22,7 +22,11 @@ logger = logging.getLogger(__name__)
 
 mcp = FastMCP(
     "자동화",
-    instructions="이 MCP는 Appium을 사용하여 모바일 장치를 제어합니다. 자동 연결 및 서버 관리 기능이 포함되어 있습니다."
+    instructions=(
+        "이 MCP는 Appium을 사용하여 모바일 장치를 제어합니다. "
+        "자동 연결 및 서버 관리 기능은 물론 화면 분석과 좌표 기반 클릭을 지원합니다. "
+        "요청에 빠르게 응답하도록 최적화되었습니다."
+    ),
 )
 
 driver = None
@@ -395,6 +399,23 @@ async def current_device_info():
 async def screenshot():
     global driver
     return driver.get_screenshot_as_base64()
+
+@mcp.tool()
+async def screen_analysis():
+    """빠른 화면 분석을 위해 스크린샷과 페이지 소스를 함께 반환"""
+    global driver
+    return {
+        "screenshot": driver.get_screenshot_as_base64(),
+        "page_source": driver.page_source,
+    }
+
+@mcp.tool()
+async def click_coordinates(x: int, y: int):
+    """지정한 좌표를 탭합니다"""
+    global driver
+    action = webdriver.common.touch_action.TouchAction(driver)
+    action.tap(x=x, y=y).perform()
+    return "클릭 성공"
 
 @mcp.tool()
 async def click(by: str, value: str):
