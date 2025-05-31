@@ -21,9 +21,6 @@ if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
         config = json.load(f)
 
-# MCP LLM 설정
-MCP_API_BASE = config.get("llm", {}).get("api_base") or os.environ.get("MCP_API_BASE", "http://localhost:8080")
-MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 
 # 로깅 설정
 logging.basicConfig(level=getattr(logging, config.get('logging', {}).get('level', 'INFO')))
@@ -609,45 +606,6 @@ async def long_press(by: str, value: str, duration: int = 2000):
     return "길게 누르기 성공"
 
 
-@mcp.tool()
-async def ask_llm(prompt: str, include_ui: bool = False):
-    """LLM에게 질문합니다. 필요 시 현재 UI 정보를 함께 전달합니다."""
-    screenshot_b64 = ""
-    page_source = ""
-    if include_ui and driver:
-        screenshot_b64 = driver.get_screenshot_as_base64()
-        page_source = await get_page_source(detailed=True)
-        prompt += f"\n\n[screenshot(base64)]: {screenshot_b64}\n[page_source]:\n{page_source}"
-
-    llm_cfg = config.get("llm", {})
-    messages = []
-    system_msg = llm_cfg.get("system_prompt")
-    if system_msg:
-        messages.append({"role": "system", "content": system_msg})
-    if current_device:
-        info = f"Device: {current_device['deviceName']} ({current_device['platform']} {current_device['osVersion']})"
-        messages.append({"role": "system", "content": info})
-    messages.append({"role": "user", "content": prompt})
-
-    payload = {
-        "model": llm_cfg.get("model", "gpt-4o"),
-        "messages": messages,
-        "max_tokens": llm_cfg.get("max_tokens", 512),
-        "temperature": llm_cfg.get("temperature", 0.2),
-    }
-    url = MCP_API_BASE.rstrip("/") + "/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {MCP_API_KEY}"} if MCP_API_KEY else {}
-
-    try:
-        resp = await asyncio.to_thread(
-            lambda: requests.post(url, json=payload, headers=headers, timeout=60)
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["choices"][0]["message"]["content"]
-    except Exception as e:
-        logger.error(f"LLM 호출 실패: {e}")
-        return f"❌ LLM 호출 실패: {e}"
 
 @mcp.tool()
 @json_result
@@ -677,8 +635,6 @@ async def disconnect():
 
     return f"✅ 장치 연결 해제됨{device_info}"
 
-
-# ---------------------------- CLI 정의 (제거됨) ----------------------------
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
