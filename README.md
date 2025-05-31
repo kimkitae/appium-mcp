@@ -11,7 +11,6 @@ Appium을 사용한 모바일 디바이스 자동화 제어를 위한 MCP (Model
 - 📊 **연결 상태 실시간 모니터링**
 - 🔄 **연결 재시작 및 복구**
 - 📋 **사용 가능한 모든 디바이스 목록 조회**
-- 💬 **LLM 연동 UI 분석 및 제어**
 
 ## 🛠️ 사전 요구사항
 
@@ -50,9 +49,6 @@ pip install -r requirements.txt
 
 # 설정 파일 확인 (자동 생성됨)
 cat config.json
-
-# LLM 사용을 위해 MCP_API_KEY 환경 변수를 설정하세요
-export MCP_API_KEY=your-key
 ```
 
 ## 🚀 빠른 시작
@@ -76,9 +72,6 @@ python cli.py auto-setup
 
 # CLI로 스크린샷 캡처
 python cli.py screenshot
-
-# LLM에게 현재 UI 설명 요청
-python cli.py ask-llm "로그인 버튼이 어디에 있나요?" --include-ui
 ```
 
 ## 🔧 설정 파일 (config.json)
@@ -108,13 +101,6 @@ python cli.py ask-llm "로그인 버튼이 어디에 있나요?" --include-ui
     "performance": {
         "use_json_source": true,
         "ignore_unimportant_views": true
-    },
-    "llm": {
-        "model": "gpt-4o",
-        "max_tokens": 512,
-        "temperature": 0.2,
-        "system_prompt": "You are a helpful assistant for mobile automation.",
-        "api_base": "http://localhost:8080"
     }
 }
 ```
@@ -148,7 +134,6 @@ python cli.py ask-llm "로그인 버튼이 어디에 있나요?" --include-ui
 - `get_attribute(by, value, attribute)` - 요소 속성 가져오기
 - `get_page_source()` - 페이지 소스 가져오기
 - `activate_app(app_id)` - 앱 패키지/번들 ID로 앱 실행
-- `ask_llm(prompt, include_ui=False)` - LLM에게 질문하고 결과 받기
 
 ## 💡 사용 예시
 
@@ -162,12 +147,6 @@ screenshot_base64 = await screenshot()
 
 # 3. 상태 확인
 status = await check_connection_status()
-```
-
-### LLM 사용 예시
-```python
-response = await ask_llm("로그인 버튼을 어떻게 눌러야 하나요?", include_ui=True)
-print(response)
 ```
 
 ### 앱 실행
