@@ -472,6 +472,31 @@ async def get_attribute(by: str, value: str, attribute: str):
     return element.get_attribute(attribute)
 
 @mcp.tool()
+async def activate_app(app_id: str = ""):
+    """지정한 앱을 실행합니다. 앱 ID가 없으면 기본 설정을 사용합니다."""
+    global driver, current_device
+
+    if not driver:
+        return "디바이스가 연결되지 않았습니다."
+
+    if not app_id:
+        platform = (current_device or {}).get("platform", "").lower()
+        if platform == "android":
+            app_id = config.get("android", {}).get("default_app_package", "")
+        else:
+            app_id = config.get("ios", {}).get("default_bundle_id", "")
+
+    if not app_id:
+        return "실행할 앱 ID를 지정해주세요."
+
+    try:
+        driver.activate_app(app_id)
+        return f"✅ 앱 실행 완료: {app_id}"
+    except Exception as e:
+        logger.error(f"앱 실행 실패: {e}")
+        return f"❌ 앱 실행 실패: {str(e)}"
+
+@mcp.tool()
 async def get_page_source(detailed: bool = False):
     """페이지 소스를 가져옵니다. 간단 모드에서는 플랫폼별 설정을 활용합니다."""
     global driver, current_device
