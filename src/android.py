@@ -262,9 +262,18 @@ class AndroidRobot(Robot):
     async def _get_ui_automator_dump(self) -> str:
         """UI Automator 덤프를 가져옵니다."""
         for _ in range(10):
-            dump = self.adb("exec-out", "uiautomator", "dump", "/dev/tty").decode('utf-8')
-            
+            dump = self.adb("exec-out", "uiautomator", "dump", "/dev/tty").decode("utf-8")
+
             if "null root node returned by UiTestAutomationBridge" not in dump:
+                # uiautomator prints a log line before the actual XML
+                # e.g. "UI hierchary dumped to: /dev/tty". Trim anything before
+                # the first XML tag to avoid XML parse errors.
+                start = dump.find("<")
+                if start != -1:
+                    dump = dump[start:]
+                    end = dump.rfind(">")
+                    if end != -1:
+                        dump = dump[: end + 1]
                 return dump
         
         raise ActionableError("UI Automator XML을 가져올 수 없습니다")
