@@ -1,0 +1,22 @@
+{
+    "appium": {
+        "server_url": "http://localhost:4723",
+        "auto_start": true,
+        "timeout": 60
+    },
+    "android": {
+        "auto_connect": true,
+        "preferred_device": null,
+        "default_app_package": "",
+        "default_app_activity": ""
+    },
+    "ios": {
+        "auto_connect": true,
+        "preferred_device": null,
+        "default_bundle_id": ""
+    },
+    "logging": {
+        "level": "INFO",
+        "enable_detailed_logs": false
+    }
+} 
