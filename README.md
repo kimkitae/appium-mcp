@@ -65,6 +65,15 @@ python start_automation.py
 python app.py
 ```
 
+### 3. CLI 사용 예시
+```bash
+# CLI로 자동 연결 실행
+python cli.py auto-setup
+
+# CLI로 스크린샷 캡처
+python cli.py screenshot
+```
+
 ## 🔧 설정 파일 (config.json)
 
 ```json
