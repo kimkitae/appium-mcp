@@ -429,11 +429,25 @@ async def screenshot():
 @mcp.tool()
 @json_result
 async def screen_analysis(detailed: bool = False):
-    """빠른 화면 분석을 위해 스크린샷과 페이지 소스를 함께 반환"""
+    """빠른 화면 분석을 위해 페이지 소스와 스크린샷을 함께 반환합니다."""
     global driver
+
+    page_source = ""
+    screenshot_b64 = ""
+
+    try:
+        page_source = await get_page_source(detailed=detailed)
+    except Exception as e:
+        logger.error(f"페이지 소스 가져오기 실패: {e}")
+
+    try:
+        screenshot_b64 = driver.get_screenshot_as_base64()
+    except Exception as e:
+        logger.warning(f"스크린샷 캡처 실패: {e}")
+
     return {
-        "screenshot": driver.get_screenshot_as_base64(),
-        "page_source": await get_page_source(detailed=detailed),
+        "page_source": page_source,
+        "screenshot": screenshot_b64,
     }
 
 @mcp.tool()
