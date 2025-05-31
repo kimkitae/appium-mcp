@@ -8,6 +8,7 @@ import os
 import time
 import logging
 import requests
+import functools
 from typing import Dict, Any
 
 # 설정 파일 로드
@@ -43,6 +44,7 @@ def _maybe_json(result):
     return result
 
 def json_result(func):
+    @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         res = await func(*args, **kwargs)
         return _maybe_json(res)
