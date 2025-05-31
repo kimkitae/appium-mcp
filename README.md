@@ -123,6 +123,7 @@ python app.py
 - `is_displayed(by, value)` - 요소 표시 여부 확인
 - `get_attribute(by, value, attribute)` - 요소 속성 가져오기
 - `get_page_source()` - 페이지 소스 가져오기
+- `activate_app(app_id)` - 앱 패키지/번들 ID로 앱 실행
 
 ## 💡 사용 예시
 
@@ -136,6 +137,15 @@ screenshot_base64 = await screenshot()
 
 # 3. 상태 확인
 status = await check_connection_status()
+```
+
+### 앱 실행
+```python
+# 기본 설정에 정의된 앱 실행
+await activate_app("")
+
+# 또는 패키지/번들 ID 직접 지정
+await activate_app("com.example.app")
 ```
 
 ### 특정 디바이스 연결
