@@ -1,210 +1,192 @@
-# Appium MCP (자동화 연결 버전)
+# Mobile Next - MCP server for Mobile Development and Automation  | iOS, Android, Simulator, Emulator, and physical devices
 
-Appium을 사용한 모바일 디바이스 자동화 제어를 위한 MCP (Model Context Protocol) 서버입니다.
-**자동 연결 및 서버 관리 기능**이 포함되어 있어 간편하게 모바일 테스트 자동화를 시작할 수 있습니다.
+This is a [Model Context Protocol (MCP) server](https://github.com/modelcontextprotocol) that enables scalable mobile automation, development through a platform-agnostic interface, eliminating the need for distinct iOS or Android knowledge. You can run it on emulators, simulators, and physical devices (iOS and Android).
+This server allows Agents and LLMs to interact with native iOS/Android applications and devices through structured accessibility snapshots or coordinate-based taps based on screenshots. 
 
-## ✨ 주요 기능
+https://github.com/user-attachments/assets/c4e89c4f-cc71-4424-8184-bdbc8c638fa1
 
-- 🚀 **자동 Appium 서버 시작/중지**
-- 📱 **디바이스 자동 검색 및 연결**
-- 🔧 **설정 파일 기반 자동화**
-- 📊 **연결 상태 실시간 모니터링**
-- 🔄 **연결 재시작 및 복구**
-- 📋 **사용 가능한 모든 디바이스 목록 조회**
 
-## 🛠️ 사전 요구사항
+<p align="center">
+  <a href="https://www.npmjs.com/package/@mobilenext/mobile-mcp">
+    <img src="https://img.shields.io/badge/npm-@mobilenext/mobile--mcp-red" alt="npm">
+  </a>
+  <a href="https://github.com/mobile-next/mobile-mcp">
+    <img src="https://img.shields.io/badge/github-repo-black" alt="GitHub repo">
+  </a>
+</p>
 
-### Android
-```bash
-# Android SDK 설치 (adb 포함)
-brew install android-platform-tools  # macOS
-# 또는 Android Studio 설치
+<p align="center">
+    <a href="https://github.com/mobile-next/">
+        <img alt="mobile-mcp" src="https://raw.githubusercontent.com/mobile-next/mobile-next-assets/refs/heads/main/mobile-mcp-banner.png" width="600">
+    </a>
+</p>
 
-# USB 디버깅 활성화 필요
-```
 
-### iOS
-```bash
-# libimobiledevice 설치
-brew install libimobiledevice  # macOS
+### 🚀 Mobile MCP Roadmap: Building the Future of Mobile
 
-# 디바이스가 신뢰할 수 있는 컴퓨터로 설정되어야 함
-```
+Join us on our journey as we continuously enhance Mobile MCP! 
+Check out our detailed roadmap to see upcoming features, improvements, and milestones. Your feedback is invaluable in shaping the future of mobile automation.
 
-### Appium
-```bash
-# Node.js 설치 후
-npm install -g appium
-npm install -g @appium/doctor
+👉 [Explore the Roadmap](https://github.com/orgs/mobile-next/projects/3)
 
-# 설치 확인
-appium-doctor
-```
 
-## 📦 설치
+### Main use cases
 
-```bash
-# 의존성 설치
-pip install -r requirements.txt
+How we help to scale mobile automation:
 
-# 설정 파일 확인 (자동 생성됨)
-cat config.json
-```
+- 📲 Native app automation (iOS and Android) for testing or data-entry scenarios. 
+- 📝 Scripted flows and form interactions without manually controlling simulators/emulators or physical devices (iPhone, Samsung, Google Pixel etc)
+- 🧭 Automating multi-step user journeys driven by an LLM
+- 👆 General-purpose mobile application interaction for agent-based frameworks
+- 🤖 Enables agent-to-agent communication for mobile automation usecases, data extraction
 
-## 🚀 빠른 시작
+## Main Features
 
-### 1. 자동화 연결 (권장)
-```bash
-# 원클릭 자동 설정 및 연결
-python start_automation.py
-```
+- 🚀 **Fast and lightweight**: Uses native accessibility trees for most interactions, or screenshot based coordinates where a11y labels are not available. 
+- 🤖 **LLM-friendly**: No computer vision model required in Accessibility (Snapshot).
+- 🧿 **Visual Sense**: Evaluates and analyses what’s actually rendered on screen to decide the next action. If accessibility data or view-hierarchy coordinates are unavailable, it falls back to screenshot-based analysis.
+- 📊 **Deterministic tool application**: Reduces ambiguity found in purely screenshot-based approaches by relying on structured data whenever possible.
+- 📺 **Extract structured data**: Enables you to extract structred data from anything visible on screen. 
 
-### 2. MCP 서버 수동 시작
-```bash
-# MCP 서버 시작
-python app.py
-```
+## 🏗️ Mobile MCP Architecture
 
-### 3. CLI 사용 예시
-```bash
-# CLI로 자동 연결 실행
-python cli.py auto-setup
+<p align="center">
+    <a href="https://raw.githubusercontent.com/mobile-next/mobile-next-assets/refs/heads/main/mobile-mcp-arch-1.png">
+        <img alt="mobile-mcp" src="https://raw.githubusercontent.com/mobile-next/mobile-next-assets/refs/heads/main/mobile-mcp-arch-1.png" width="600">
+    </a>
+</p>
 
-# CLI로 스크린샷 캡처
-python cli.py screenshot
-```
 
-## 🔧 설정 파일 (config.json)
+## 📚 Wiki page 
+
+More details in our [wiki page](https://github.com/mobile-next/mobile-mcp/wiki) for setup, configuration and debugging related questions.
+
+
+## Installation and configuration
+
+Setup our MCP with Cline, Cursor, Claude, VS Code, Github Copilot:
 
 ```json
 {
-    "appium": {
-        "server_url": "http://localhost:4723",
-        "auto_start": true,
-        "timeout": 60
-    },
-    "android": {
-        "auto_connect": true,
-        "preferred_device": null,
-        "default_app_package": "com.example.app",
-        "default_app_activity": ".MainActivity"
-    },
-    "ios": {
-        "auto_connect": true,
-        "preferred_device": null,
-        "default_bundle_id": "com.example.app"
-    },
-    "logging": {
-        "level": "INFO",
-        "enable_detailed_logs": false
-    },
-    "performance": {
-        "use_json_source": true,
-        "ignore_unimportant_views": true
+  "mcpServers": {
+    "mobile-mcp": {
+      "command": "npx",
+      "args": ["-y", "@mobilenext/mobile-mcp@latest"]
     }
+  }
 }
+
+```
+[Cline:](https://docs.cline.bot/mcp/configuring-mcp-servers) To setup Cline, just add the json above to your MCP settings file. 
+[More in our wiki](https://github.com/mobile-next/mobile-mcp/wiki/Cline) 
+
+
+```
+claude mcp add mobile -- npx -y @mobilenext/mobile-mcp@latest ⁠
 ```
 
-### 성능 최적화 옵션
-- `use_json_source` : iOS 페이지 소스를 JSON 포맷으로 받아 속도를 높입니다.
-- `ignore_unimportant_views` : Android에서 중요하지 않은 뷰를 제외해 페이지 소스 크기를 줄입니다.
+[Claude Code:](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview)
 
-## 📱 사용 가능한 MCP 도구들
-
-### 연결 관리
-- `auto_setup()` - 자동 서버 시작 및 디바이스 연결
-- `connect()` - 특정 디바이스에 수동 연결  
-- `disconnect()` - 연결 해제
-- `restart_connection()` - 연결 재시작
-
-### 상태 확인
-- `check_connection_status()` - 현재 연결 상태 확인
-- `list_available_devices()` - 사용 가능한 디바이스 목록
-- `current_device_info()` - 현재 연결된 디바이스 정보
-
-### 디바이스 제어
-- `screenshot()` - 스크린샷 캡처
-- `screen_analysis()` - 스크린샷과 페이지 소스 동시 가져오기
-- `screen_analysis_click(by, value, timeout=10)` - 화면 분석으로 요소를 기다렸다가 바로 클릭
-- `click_coordinates(x, y)` - 좌표 기반 클릭
-- `click(by, value)` - 요소 클릭
-- `swipe(start_x, start_y, end_x, end_y)` - 스와이프
-- `long_press(by, value)` - 길게 누르기
-- `is_displayed(by, value)` - 요소 표시 여부 확인
-- `get_attribute(by, value, attribute)` - 요소 속성 가져오기
-- `get_page_source()` - 페이지 소스 가져오기
-- `activate_app(app_id)` - 앱 패키지/번들 ID로 앱 실행
-
-## 💡 사용 예시
-
-### 자동 연결 후 스크린샷
-```python
-# 1. 자동 설정
-await auto_setup()
-
-# 2. 스크린샷 캡처
-screenshot_base64 = await screenshot()
-
-# 3. 상태 확인
-status = await check_connection_status()
+```
+claude mcp add mobile -- npx -y @mobilenext/mobile-mcp@latest ⁠
 ```
 
-### 앱 실행
-```python
-# 기본 설정에 정의된 앱 실행
-await activate_app("")
+[Read more in our wiki](https://github.com/mobile-next/mobile-mcp/wiki)! 🚀
 
-# 또는 패키지/번들 ID 직접 지정
-await activate_app("com.example.app")
+
+### 🛠️ How to Use 📝
+
+After adding the MCP server to your IDE/Client, you can instruct your AI assistant to use the available tools. 
+For example, in Cursor's agent mode, you could use the prompts below to quickly validate, test and iterate on UI intereactions, read information from screen, go through complex workflows.
+Be descriptive, straight to the point.
+
+### ✨ Example Prompts
+
+#### Workflows
+
+You can specifiy detailed workflows in a single prompt, verify business logic, setup automations. You can go crazy:
+
+**Search for a video, comment, like and share it.**
+```
+Find the video called " Beginner Recipe for Tonkotsu Ramen" by Way of Ramen, click on like video, after liking write a comment " this was delicious, will make it next Friday", share the video with the first contact in your whatsapp list. 
 ```
 
-### 특정 디바이스 연결
-```python
-# Android 특정 디바이스
-await connect(
-    platform="android",
-    udid="your_device_serial",
-    appPackage="com.example.app",
-    appActivity=".MainActivity"
-)
-
-# iOS 특정 디바이스  
-await connect(
-    platform="ios",
-    udid="your_device_udid",
-    bundleId="com.example.app"
-)
+**Download a successful step counter app, register, setup workout and 5 start the app**
+```
+Find and Download a free "Pomodoro" app that has more thank 1k stars. 
+Launch the app, register with my email, after registration find how to start a pomodoro timer. 
+When the pomodoro timer started, go back to the app store and rate the app 5 stars, 
+and leave a comment how useful the app is. 
 ```
 
-## 🔍 문제 해결
-
-### 일반적인 문제들
-
-1. **"adb 명령을 찾을 수 없습니다"**
-   - Android SDK 설치 및 PATH 설정 확인
-
-2. **"연결된 Android 장치가 없습니다"**
-   - USB 디버깅 활성화 확인
-   - `adb devices` 명령으로 디바이스 인식 확인
-
-3. **"Appium 서버를 시작할 수 없습니다"**
-   - `npm install -g appium` 설치 확인
-   - 포트 4723 사용 중인지 확인
-
-4. **"iOS 장치 연결 실패"**
-   - libimobiledevice 설치 확인
-   - 디바이스가 신뢰할 수 있는 컴퓨터로 설정되었는지 확인
-
-### 로그 활성화
-```json
-{
-    "logging": {
-        "level": "DEBUG",
-        "enable_detailed_logs": true
-    }
-}
+**Search in Substack, read, highlight, comment and save an article**
+```
+Open Substack website, search for "Latest trends in AI automation 2025", open the first article, 
+highlight the section titled "Emerging AI trends", and save article to reading list for later review, 
+comment a random paragraph summary.
 ```
 
-## 📝 라이센스
+**Reserve a workout class, set timer**
+```
+Open ClassPass, search for yoga classes tomorrow morning within 2 miles, 
+book the highest-rated class at 7 AM, confirm reservation,
+ setup a timer for the booked slot in the phone
+```
 
-이 프로젝트는 MIT 라이센스 하에 배포됩니다. 
+**Find a local event, setup calendar event**
+```
+Open Eventbrite, search for AI startup meetup events happening this weekend in "Austin, TX", 
+select the most popular one, register and RSVP yes to the even, setup a calendar event as a reminder.
+```
+
+**Check weather forecast and send a Whatsapp/Telegram/Slack message**
+```
+Open Weather app, check tomorrow's weather forecast for "Berlin", and send the summary 
+via Whatsapp/Telegram/Slack to contact "Lauren Trown", thumbs up their response.
+```
+
+- **Schedule a meeting in Zoom and share invite via email**
+```
+Open Zoom app, schedule a meeting titled "AI Hackathon" for tomorrow at 10 AM with a duration of 1 hour,
+copy the invitation link, and send it via Gmail to contacts "team@example.com".
+```
+[More prompt examples can be found here.](https://github.com/mobile-next/mobile-mcp/wiki/Prompt-Example-repo-list)
+
+## Prerequisites
+
+What you will need to connect MCP with your agent and mobile devices:
+
+- [Xcode command line tools](https://developer.apple.com/xcode/resources/)
+- [Android Platform Tools](https://developer.android.com/tools/releases/platform-tools)
+- [node.js](https://nodejs.org/en/download/)
+- [MCP](https://modelcontextprotocol.io/introduction) supported foundational models or agents, like [Claude MCP](https://modelcontextprotocol.io/quickstart/server), [OpenAI Agent SDK](https://openai.github.io/openai-agents-python/mcp/), [Copilot Studio](https://www.microsoft.com/en-us/microsoft-copilot/blog/copilot-studio/introducing-model-context-protocol-mcp-in-copilot-studio-simplified-integration-with-ai-apps-and-agents/)
+
+### Simulators, Emulators, and Physical Devices
+
+When launched, Mobile MCP can connect to:
+- iOS Simulators on macOS/Linux
+- Android Emulators on Linux/Windows/macOS
+- Physical iOS or Android devices (requires proper platform tools and drivers)
+
+Make sure you have your mobile platform SDKs (Xcode, Android SDK) installed and configured properly before running Mobile Next Mobile MCP.
+
+### Running in "headless" mode on Simulators/Emulators
+
+When you do not have a physical phone connected to your machine, you can run Mobile MCP with an emulator or simulator in the background.
+
+For example, on Android:
+1. Start an emulator (avdmanager / emulator command).
+2. Run Mobile MCP with the desired flags
+
+On iOS, you'll need Xcode and to run the Simulator before using Mobile MCP with that simulator instance.
+- `xcrun simctl list`
+- `xcrun simctl boot "iPhone 16"`
+
+# Thanks to all contributors ❤️
+
+### We appreciate everyone who has helped improve this project. 
+
+  <a href = "https://github.com/mobile-next/mobile-mcp/graphs/contributors">
+   <img src = "https://contrib.rocks/image?repo=mobile-next/mobile-mcp"/>
+ </a>
+
