@@ -263,6 +263,7 @@ class AndroidRobot(Robot):
             "msg",
             text,
         )
+
     
     async def press_button(self, button: Button) -> None:
         """버튼을 누릅니다."""
