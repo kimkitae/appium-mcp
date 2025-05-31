@@ -229,8 +229,16 @@ class AndroidRobot(Robot):
     
     async def send_keys(self, text: str) -> None:
         """키 입력을 전송합니다."""
-        # ADB shell에서 공백 이스케이프 처리
-        escaped_text = text.replace(' ', '\\ ')
+        escaped_chars = []
+        for char in text:
+            if char == ' ':
+                escaped_chars.append('\\ ')
+            elif char.isascii():
+                escaped_chars.append(char)
+            else:
+                escaped_chars.append(f"\\u{ord(char):04x}")
+
+        escaped_text = ''.join(escaped_chars)
         self.adb("shell", "input", "text", escaped_text)
     
     async def press_button(self, button: Button) -> None:
