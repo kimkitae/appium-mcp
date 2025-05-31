@@ -18,5 +18,9 @@
     "logging": {
         "level": "INFO",
         "enable_detailed_logs": false
+    },
+    "performance": {
+        "use_json_source": true,
+        "ignore_unimportant_views": true
     }
-} 
+}

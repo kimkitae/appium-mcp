@@ -310,6 +310,7 @@ async def connect(platform: str, deviceName: str = "", udid: str = "", appPackag
                 "newCommandTimeout": config.get('appium', {}).get('timeout', 60),
                 "noReset": True,
                 "autoGrantPermissions": True,
+                "ignoreUnimportantViews": config.get('performance', {}).get('ignore_unimportant_views', True),
             }
         )
 
@@ -362,6 +363,7 @@ async def connect(platform: str, deviceName: str = "", udid: str = "", appPackag
                 "bundleId": bundleId,
                 "newCommandTimeout": config.get('appium', {}).get('timeout', 60),
                 "noReset": True,
+                "useJSONSource": config.get('performance', {}).get('use_json_source', True),
             }
         )
 
@@ -401,12 +403,12 @@ async def screenshot():
     return driver.get_screenshot_as_base64()
 
 @mcp.tool()
-async def screen_analysis():
+async def screen_analysis(detailed: bool = False):
     """빠른 화면 분석을 위해 스크린샷과 페이지 소스를 함께 반환"""
     global driver
     return {
         "screenshot": driver.get_screenshot_as_base64(),
-        "page_source": driver.page_source,
+        "page_source": await get_page_source(detailed=detailed),
     }
 
 @mcp.tool()
@@ -443,8 +445,24 @@ async def get_attribute(by: str, value: str, attribute: str):
     return element.get_attribute(attribute)
 
 @mcp.tool()
-async def get_page_source():
-    global driver
+async def get_page_source(detailed: bool = False):
+    """페이지 소스를 가져옵니다. 간단 모드에서는 플랫폼별 설정을 활용합니다."""
+    global driver, current_device
+    if not detailed:
+        platform = (current_device or {}).get("platform", "").lower()
+        if platform == "ios" and config.get("performance", {}).get("use_json_source", False):
+            try:
+                return driver.execute_script("mobile: source", {"format": "json"})
+            except Exception:
+                pass
+        elif platform == "android" and config.get("performance", {}).get("ignore_unimportant_views", False):
+            try:
+                driver.update_settings({"ignoreUnimportantViews": True})
+                source = driver.page_source
+                driver.update_settings({"ignoreUnimportantViews": False})
+                return source
+            except Exception:
+                pass
     return driver.page_source
 
 @mcp.tool()

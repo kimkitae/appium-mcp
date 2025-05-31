@@ -88,9 +88,17 @@ python app.py
     "logging": {
         "level": "INFO",
         "enable_detailed_logs": false
+    },
+    "performance": {
+        "use_json_source": true,
+        "ignore_unimportant_views": true
     }
 }
 ```
+
+### 성능 최적화 옵션
+- `use_json_source` : iOS 페이지 소스를 JSON 포맷으로 받아 속도를 높입니다.
+- `ignore_unimportant_views` : Android에서 중요하지 않은 뷰를 제외해 페이지 소스 크기를 줄입니다.
 
 ## 📱 사용 가능한 MCP 도구들
 
