@@ -83,6 +83,22 @@ mypy src/
 - **Android:** `설정` → `시스템` → `언어 및 입력` → `가상 키보드` → `Gboard` → `언어` → `키보드 추가` 에서 **한국어**를 선택합니다.
 - **iOS:** `설정` → `일반` → `키보드` → `키보드` → `새로운 키보드 추가`에서 **한국어**를 선택합니다.
 
+### Appium UnicodeIME 활용 방법
+
+`adb shell input text` 명령은 기본적으로 ASCII 문자 입력만 지원합니다.
+한글처럼 비 ASCII 문자를 입력하려면 Appium Settings 앱에 포함된
+**UnicodeIME** 입력기를 사용해야 합니다. `mobile-mcp`는 비 ASCII 문자가
+포함된 문자열을 입력할 때 자동으로 UnicodeIME를 활성화하고
+브로드캐스트 방식으로 텍스트를 전송합니다.
+
+만약 기기에 `io.appium.settings` 앱이 설치되어 있지 않다면 APK를 설치한
+후 다음 명령으로 IME를 활성화할 수 있습니다.
+
+```bash
+adb shell ime enable io.appium.settings/.UnicodeIME
+adb shell ime set io.appium.settings/.UnicodeIME
+```
+
 ## 라이선스
 
 MIT License 

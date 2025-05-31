@@ -229,17 +229,39 @@ class AndroidRobot(Robot):
     
     async def send_keys(self, text: str) -> None:
         """키 입력을 전송합니다."""
-        escaped_chars = []
-        for char in text:
-            if char == ' ':
-                escaped_chars.append('\\ ')
-            elif char.isascii():
-                escaped_chars.append(char)
-            else:
-                escaped_chars.append(f"\\u{ord(char):04x}")
+        # 기본적으로는 ``adb shell input text`` 명령을 사용한다. 이 방식은
+        # ASCII 문자에만 제대로 동작하므로 비 ASCII 문자가 포함된 경우에는
+        # Appium UnicodeIME를 통해 브로드캐스트 방식으로 입력을 전달한다.
 
-        escaped_text = ''.join(escaped_chars)
-        self.adb("shell", "input", "text", escaped_text)
+        def is_ascii(s: str) -> bool:
+            try:
+                s.encode("ascii")
+                return True
+            except UnicodeEncodeError:
+                return False
+
+        if is_ascii(text):
+            escaped_text = text.replace(" ", "\\ ")
+            self.adb("shell", "input", "text", escaped_text)
+            return
+
+        # UnicodeIME를 사용하여 유니코드 문자열을 입력한다. 이미 설정되어 있
+        # 거나 설치되지 않은 경우 예외는 무시한다.
+        try:
+            self.adb("shell", "ime", "set", "io.appium.settings/.UnicodeIME")
+        except Exception:
+            pass
+
+        self.adb(
+            "shell",
+            "am",
+            "broadcast",
+            "-a",
+            "ADB_INPUT_TEXT",
+            "--es",
+            "msg",
+            text,
+        )
     
     async def press_button(self, button: Button) -> None:
         """버튼을 누릅니다."""
