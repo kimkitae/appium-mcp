@@ -8,9 +8,6 @@ import os
 import time
 import logging
 import asyncio
-import sys
-import openai
-import click
 import requests
 from typing import Dict, Any
 
