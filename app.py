@@ -413,10 +413,22 @@ async def screen_analysis(detailed: bool = False):
 
 @mcp.tool()
 async def click_coordinates(x: int, y: int):
-    """지정한 좌표를 탭합니다"""
+    """지정한 좌표를 탭합니다 (W3C Actions 사용)"""
     global driver
-    action = webdriver.common.touch_action.TouchAction(driver)
-    action.tap(x=x, y=y).perform()
+    actions = [
+        {
+            "type": "pointer",
+            "id": "finger1",
+            "parameters": {"pointerType": "touch"},
+            "actions": [
+                {"type": "pointerMove", "duration": 0, "x": x, "y": y},
+                {"type": "pointerDown", "button": 0},
+                {"type": "pointerUp", "button": 0},
+            ],
+        }
+    ]
+    driver.perform_actions(actions)
+    driver.release_actions()
     return "클릭 성공"
 
 @mcp.tool()
@@ -428,8 +440,23 @@ async def click(by: str, value: str):
 
 @mcp.tool()
 async def swipe(start_x: int, start_y: int, end_x: int, end_y: int, duration: int = 800):
+    """지정한 좌표로 스와이프 (W3C Actions 사용)"""
     global driver
-    driver.swipe(start_x, start_y, end_x, end_y, duration)
+    actions = [
+        {
+            "type": "pointer",
+            "id": "finger1",
+            "parameters": {"pointerType": "touch"},
+            "actions": [
+                {"type": "pointerMove", "duration": 0, "x": start_x, "y": start_y},
+                {"type": "pointerDown", "button": 0},
+                {"type": "pointerMove", "duration": duration, "x": end_x, "y": end_y},
+                {"type": "pointerUp", "button": 0},
+            ],
+        }
+    ]
+    driver.perform_actions(actions)
+    driver.release_actions()
     return "스와이프 성공"
 
 @mcp.tool()
@@ -467,10 +494,27 @@ async def get_page_source(detailed: bool = False):
 
 @mcp.tool()
 async def long_press(by: str, value: str, duration: int = 2000):
+    """요소를 길게 누르기 (W3C Actions 사용)"""
     global driver
     element = driver.find_element(by, value)
-    action = webdriver.common.touch_action.TouchAction(driver)
-    action.long_press(element, duration=duration).release().perform()
+    rect = element.rect
+    center_x = int(rect["x"] + rect["width"] / 2)
+    center_y = int(rect["y"] + rect["height"] / 2)
+    actions = [
+        {
+            "type": "pointer",
+            "id": "finger1",
+            "parameters": {"pointerType": "touch"},
+            "actions": [
+                {"type": "pointerMove", "duration": 0, "x": center_x, "y": center_y},
+                {"type": "pointerDown", "button": 0},
+                {"type": "pause", "duration": duration},
+                {"type": "pointerUp", "button": 0},
+            ],
+        }
+    ]
+    driver.perform_actions(actions)
+    driver.release_actions()
     return "길게 누르기 성공"
 
 @mcp.tool()
