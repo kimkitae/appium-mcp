@@ -25,9 +25,20 @@ from app import (
 
 JSON_ENV = os.environ.get("MCP_JSON", "0").lower() in ("1", "true")
 
+def _sanitize(obj):
+    """Remove non-ASCII characters from strings for clean JSON output."""
+    if isinstance(obj, str):
+        return obj.encode("ascii", errors="ignore").decode()
+    if isinstance(obj, list):
+        return [_sanitize(i) for i in obj]
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    return obj
+
 
 def output_result(result, json_output: bool):
     if json_output:
+        result = _sanitize(result)
         if not isinstance(result, (dict, list)):
             result = {"result": result}
         click.echo(json.dumps(result, ensure_ascii=False))

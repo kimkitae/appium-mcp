@@ -38,9 +38,22 @@ appium_process = None
 
 JSON_OUTPUT = os.environ.get("MCP_JSON", "0").lower() in ("1", "true")
 
+def _sanitize(obj):
+    """Remove non-ASCII characters from strings for clean JSON output."""
+    if isinstance(obj, str):
+        return obj.encode("ascii", errors="ignore").decode()
+    if isinstance(obj, list):
+        return [_sanitize(i) for i in obj]
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    return obj
+
 def _maybe_json(result):
-    if JSON_OUTPUT and not isinstance(result, (dict, list)):
-        return {"result": result}
+    if JSON_OUTPUT:
+        sanitized = _sanitize(result)
+        if not isinstance(sanitized, (dict, list)):
+            return {"result": sanitized}
+        return sanitized
     return result
 
 def json_result(func):
