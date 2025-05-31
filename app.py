@@ -7,7 +7,6 @@ import json
 import os
 import time
 import logging
-import asyncio
 import requests
 from typing import Dict, Any
 
@@ -52,8 +51,10 @@ def json_result(func):
 def is_appium_server_running() -> bool:
     """Appium 서버가 실행 중인지 확인"""
     try:
-        import requests
-        response = requests.get(f"{config.get('appium', {}).get('server_url', 'http://localhost:4723')}/status", timeout=5)
+        response = requests.get(
+            f"{config.get('appium', {}).get('server_url', 'http://localhost:4723')}/status",
+            timeout=5,
+        )
         return response.status_code == 200
     except Exception:
         return False
