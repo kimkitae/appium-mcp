@@ -3,10 +3,10 @@ import unittest
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 try:
-    from ios import IosManager, IosRobot
+    from src.ios import IosManager, IosRobot
 except Exception:  # pragma: no cover - skip if dependencies missing
     IosManager = None  # type: ignore
     IosRobot = None  # type: ignore

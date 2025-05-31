@@ -182,6 +182,13 @@ On iOS, you'll need Xcode and to run the Simulator before using Mobile MCP with 
 - `xcrun simctl list`
 - `xcrun simctl boot "iPhone 16"`
 
+### Hangul keyboard not showing?
+
+If you see only the English keyboard when typing, add the Korean keyboard in the device settings.
+
+- **Android:** `Settings` → `System` → `Languages & input` → `Virtual keyboard` → `Gboard` → `Languages` → `Add keyboard` and choose **Korean**.
+- **iOS:** `Settings` → `General` → `Keyboard` → `Keyboards` → `Add New Keyboard` and select **Korean**.
+
 # Thanks to all contributors ❤️
 
 ### We appreciate everyone who has helped improve this project. 
