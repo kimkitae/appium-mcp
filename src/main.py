@@ -32,6 +32,11 @@ def main() -> None:
     asyncio.run(async_main())
 
 
+def run() -> None:
+    """Backward compatibility entrypoint"""
+    main()
+
+
 if __name__ == "__main__":
     try:
         main()
