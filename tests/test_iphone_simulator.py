@@ -2,10 +2,10 @@ import unittest
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 try:
-    from iphone_simulator import Simctl
+    from src.iphone_simulator import Simctl
 except Exception:  # pragma: no cover - skip if dependency missing
     Simctl = None  # type: ignore
 

@@ -229,9 +229,40 @@ class AndroidRobot(Robot):
     
     async def send_keys(self, text: str) -> None:
         """키 입력을 전송합니다."""
-        # ADB shell에서 공백 이스케이프 처리
-        escaped_text = text.replace(' ', '\\ ')
-        self.adb("shell", "input", "text", escaped_text)
+        # 기본 입력 방식은 `adb shell input text` 명령을 사용합니다.
+        # 이 방식은 ASCII 문자에만 제대로 동작하므로,
+        # 비 ASCII 문자가 포함된 경우 Appium UnicodeIME를 이용해
+        # 브로드캐스트 방식으로 입력을 전달합니다.
+
+        def is_ascii(s: str) -> bool:
+            try:
+                s.encode("ascii")
+                return True
+            except UnicodeEncodeError:
+                return False
+
+        if is_ascii(text):
+            escaped_text = text.replace(" ", "\\ ")
+            self.adb("shell", "input", "text", escaped_text)
+            return
+
+        # UnicodeIME 사용을 위해 IME를 설정하고 브로드캐스트 전송
+        try:
+            self.adb("shell", "ime", "set", "io.appium.settings/.UnicodeIME")
+        except Exception:
+            # 설치되지 않았거나 이미 설정된 경우 무시합니다
+            pass
+
+        self.adb(
+            "shell",
+            "am",
+            "broadcast",
+            "-a",
+            "ADB_INPUT_TEXT",
+            "--es",
+            "msg",
+            text,
+        )
     
     async def press_button(self, button: Button) -> None:
         """버튼을 누릅니다."""
