@@ -1,5 +1,6 @@
 import json
 import base64
+import asyncio
 from typing import Optional, Dict, Any, List, Callable
 import aiohttp
 from mcp.server import Server
@@ -14,13 +15,12 @@ from iphone_simulator import SimctlManager
 from ios import IosManager, IosRobot
 from png import PNG
 from image_utils import is_imagemagick_installed, Image
+from __init__ import __version__
 
 
 def get_agent_version() -> str:
     """에이전트 버전을 가져옵니다."""
-    with open("../package.json", "r") as f:
-        data = json.load(f)
-        return data["version"]
+    return __version__
 
 
 async def get_latest_agent_version() -> str:
@@ -275,8 +275,9 @@ def create_mcp_server() -> Server:
                 android_manager = AndroidDeviceManager()
                 devices = simulator_manager.list_booted_simulators()
                 simulator_names = [d.name for d in devices]
+                ios_devices_task = asyncio.create_task(ios_manager.list_devices())
                 android_devices = android_manager.get_connected_devices()
-                ios_devices = await ios_manager.list_devices()
+                ios_devices = await ios_devices_task
                 ios_device_names = [d.device_id for d in ios_devices]
                 android_tv_devices = [d.device_id for d in android_devices if d.device_type == "tv"]
                 android_mobile_devices = [d.device_id for d in android_devices if d.device_type == "mobile"]

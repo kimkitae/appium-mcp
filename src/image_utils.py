@@ -1,5 +1,6 @@
 import subprocess
 from typing import Literal, Optional, Dict
+from functools import lru_cache
 
 
 DEFAULT_JPEG_QUALITY = 75
@@ -69,6 +70,7 @@ class Image:
         return ImageTransformer(self.buffer).jpeg(options)
 
 
+@lru_cache(maxsize=1)
 def is_imagemagick_installed() -> bool:
     """ImageMagick이 설치되어 있는지 확인합니다."""
     try:
