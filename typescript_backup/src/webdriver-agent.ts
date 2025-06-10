@@ -211,19 +211,38 @@ export class WebDriverAgent {
 		});
 	}
 
-	public async swipe(direction: SwipeDirection) {
-		await this.withinSession(async sessionUrl => {
+        public async swipe(direction: SwipeDirection) {
+                const screenSize = await this.getScreenSize();
+                await this.withinSession(async sessionUrl => {
 
-			const x0 = 200;
-			let y0 = 600;
-			const x1 = 200;
-			let y1 = 200;
+                        let x0: number, y0: number, x1: number, y1: number;
+                        const centerX = screenSize.width >> 1;
+                        const centerY = screenSize.height >> 1;
 
-			if (direction === "up") {
-				const tmp = y0;
-				y0 = y1;
-				y1 = tmp;
-			}
+                        switch (direction) {
+                                case "up":
+                                        x0 = x1 = centerX;
+                                        y0 = Math.floor(screenSize.height * 0.80);
+                                        y1 = Math.floor(screenSize.height * 0.20);
+                                        break;
+                                case "down":
+                                        x0 = x1 = centerX;
+                                        y0 = Math.floor(screenSize.height * 0.20);
+                                        y1 = Math.floor(screenSize.height * 0.80);
+                                        break;
+                                case "left":
+                                        y0 = y1 = centerY;
+                                        x0 = Math.floor(screenSize.width * 0.80);
+                                        x1 = Math.floor(screenSize.width * 0.20);
+                                        break;
+                                case "right":
+                                        y0 = y1 = centerY;
+                                        x0 = Math.floor(screenSize.width * 0.20);
+                                        x1 = Math.floor(screenSize.width * 0.80);
+                                        break;
+                                default:
+                                        throw new ActionableError(`Swipe direction "${direction}" is not supported`);
+                        }
 
 			const url = `${sessionUrl}/actions`;
 			await fetch(url, {
