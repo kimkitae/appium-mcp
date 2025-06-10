@@ -265,18 +265,18 @@ export const createMcpServer = (): McpServer => {
 		}
 	);
 
-	tool(
-		"swipe_on_screen",
-		"Swipe on the screen",
-		{
-			direction: z.enum(["up", "down"]).describe("The direction to swipe"),
-		},
-		async ({ direction }) => {
-			requireRobot();
-			await robot!.swipe(direction);
-			return `Swiped ${direction} on screen`;
-		}
-	);
+        tool(
+                "swipe_on_screen",
+                "Swipe on the screen",
+                {
+                        direction: z.enum(["up", "down", "left", "right"]).describe("The direction to swipe"),
+                },
+                async ({ direction }) => {
+                        requireRobot();
+                        await robot!.swipe(direction);
+                        return `Swiped ${direction} on screen`;
+                }
+        );
 
 	tool(
 		"mobile_type_keys",

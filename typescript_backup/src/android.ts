@@ -119,25 +119,35 @@ export class AndroidRobot implements Robot {
 
 	public async swipe(direction: SwipeDirection): Promise<void> {
 		const screenSize = await this.getScreenSize();
-		const centerX = screenSize.width >> 1;
-		// const centerY = screenSize[1] >> 1;
+                const centerX = screenSize.width >> 1;
+                const centerY = screenSize.height >> 1;
 
-		let x0: number, y0: number, x1: number, y1: number;
+                let x0: number, y0: number, x1: number, y1: number;
 
-		switch (direction) {
-			case "up":
-				x0 = x1 = centerX;
-				y0 = Math.floor(screenSize.height * 0.80);
-				y1 = Math.floor(screenSize.height * 0.20);
-				break;
-			case "down":
-				x0 = x1 = centerX;
-				y0 = Math.floor(screenSize.height * 0.20);
-				y1 = Math.floor(screenSize.height * 0.80);
-				break;
-			default:
-				throw new ActionableError(`Swipe direction "${direction}" is not supported`);
-		}
+                switch (direction) {
+                        case "up":
+                                x0 = x1 = centerX;
+                                y0 = Math.floor(screenSize.height * 0.80);
+                                y1 = Math.floor(screenSize.height * 0.20);
+                                break;
+                        case "down":
+                                x0 = x1 = centerX;
+                                y0 = Math.floor(screenSize.height * 0.20);
+                                y1 = Math.floor(screenSize.height * 0.80);
+                                break;
+                        case "left":
+                                y0 = y1 = centerY;
+                                x0 = Math.floor(screenSize.width * 0.80);
+                                x1 = Math.floor(screenSize.width * 0.20);
+                                break;
+                        case "right":
+                                y0 = y1 = centerY;
+                                x0 = Math.floor(screenSize.width * 0.20);
+                                x1 = Math.floor(screenSize.width * 0.80);
+                                break;
+                        default:
+                                throw new ActionableError(`Swipe direction "${direction}" is not supported`);
+                }
 
 		this.adb("shell", "input", "swipe", `${x0}`, `${y0}`, `${x1}`, `${y1}`, "1000");
 	}
