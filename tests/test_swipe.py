@@ -41,6 +41,16 @@ class TestSwipeGestures(unittest.TestCase):
             self.assertEqual(args[2], "swipe")
             self.assertEqual(args[3:], ("800", "1000", "200", "1000", "1000"))
 
+    def test_android_swipe_between_points(self):
+        robot = AndroidRobot("serial")
+        with patch.object(robot, "adb") as mock_adb:
+            asyncio.run(robot.swipe_between_points(10, 20, 30, 40))
+            args = mock_adb.call_args[0]
+            self.assertEqual(args[0], "shell")
+            self.assertEqual(args[1], "input")
+            self.assertEqual(args[2], "swipe")
+            self.assertEqual(args[3:], ("10", "20", "30", "40", "1000"))
+
     def test_wda_swipe_right(self):
         wda = WebDriverAgent("localhost", 8100)
         posts = []
@@ -60,6 +70,22 @@ class TestSwipeGestures(unittest.TestCase):
             self.assertEqual(actions[0]["y"], 500)
             self.assertEqual(actions[2]["x"], 800)
             self.assertEqual(actions[2]["y"], 500)
+
+    def test_wda_swipe_between_points(self):
+        wda = WebDriverAgent("localhost", 8100)
+        posts = []
+        with patch.object(
+            wda, "within_session", side_effect=lambda fn: fn("http://localhost:8100/session/1")
+        ), patch(
+            "aiohttp.ClientSession", lambda: DummySession(posts)
+        ):
+            asyncio.run(wda.swipe_between_points(1, 2, 3, 4))
+            self.assertEqual(posts[0][0], "http://localhost:8100/session/1/actions")
+            actions = posts[0][1]["actions"][0]["actions"]
+            self.assertEqual(actions[0]["x"], 1)
+            self.assertEqual(actions[0]["y"], 2)
+            self.assertEqual(actions[2]["x"], 3)
+            self.assertEqual(actions[2]["y"], 4)
 
 
 if __name__ == "__main__":

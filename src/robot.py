@@ -65,6 +65,12 @@ class Robot(Protocol):
     async def swipe(self, direction: SwipeDirection) -> None:
         """지정된 방향으로 스와이프합니다."""
         ...
+
+    async def swipe_between_points(
+        self, start_x: int, start_y: int, end_x: int, end_y: int
+    ) -> None:
+        """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
+        ...
     
     async def get_screenshot(self) -> bytes:
         """화면의 스크린샷을 가져옵니다. PNG 이미지가 포함된 bytes를 반환합니다."""

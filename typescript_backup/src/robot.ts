@@ -50,10 +50,20 @@ export interface Robot {
 	 */
 	getScreenSize(): Promise<ScreenSize>;
 
-	/**
-	 * Swipe in a direction.
-	 */
-	swipe(direction: SwipeDirection): Promise<void>;
+        /**
+         * Swipe in a direction.
+         */
+        swipe(direction: SwipeDirection): Promise<void>;
+
+        /**
+         * Swipe from one coordinate to another.
+         */
+        swipeBetweenPoints(
+                startX: number,
+                startY: number,
+                endX: number,
+                endY: number
+        ): Promise<void>;
 
 	/**
 	 * Get a screenshot of the screen. Returns a Buffer that contains

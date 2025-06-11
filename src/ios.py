@@ -145,6 +145,13 @@ class IosRobot(Robot):
         """스와이프합니다."""
         wda = await self._wda()
         await wda.swipe(direction)
+
+    async def swipe_between_points(
+        self, start_x: int, start_y: int, end_x: int, end_y: int
+    ) -> None:
+        """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
+        wda = await self._wda()
+        await wda.swipe_between_points(start_x, start_y, end_x, end_y)
     
     async def list_apps(self) -> List[InstalledApp]:
         """설치된 앱 목록을 가져옵니다."""

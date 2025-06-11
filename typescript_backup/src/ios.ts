@@ -116,10 +116,15 @@ export class IosRobot implements Robot {
 		return await wda.getScreenSize();
 	}
 
-	public async swipe(direction: SwipeDirection): Promise<void> {
-		const wda = await this.wda();
-		await wda.swipe(direction);
-	}
+        public async swipe(direction: SwipeDirection): Promise<void> {
+                const wda = await this.wda();
+                await wda.swipe(direction);
+        }
+
+        public async swipeBetweenPoints(startX: number, startY: number, endX: number, endY: number): Promise<void> {
+                const wda = await this.wda();
+                await wda.swipeBetweenPoints(startX, startY, endX, endY);
+        }
 
 	public async listApps(): Promise<InstalledApp[]> {
 		await this.assertTunnelRunning();
