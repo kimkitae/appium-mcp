@@ -309,12 +309,20 @@ def create_mcp_server() -> Server:
                 screen_size = await robot.get_screen_size()
                 result = f"화면 크기: {screen_size.width}x{screen_size.height} 픽셀"
 
-            elif name == "mobile_click_on_screen_at_coordinates":
+           elif name == "mobile_click_on_screen_at_coordinates":
                 require_robot()
                 x = arguments["x"]
                 y = arguments["y"]
-                await robot.tap(x, y)
-                result = f"좌표 {x}, {y}에서 화면 클릭됨"
+                screen_size = await robot.get_screen_size()
+                scale = screen_size.scale if screen_size else 1
+
+                # 터치 좌표는 스크린샷에서 얻은 값일 수 있으므로
+                # 스크린샷 축소 배율(scale)을 적용해 실제 좌표로 보정합니다
+                tx = int(x * scale)
+                ty = int(y * scale)
+
+                await robot.tap(tx, ty)
+                result = f"좌표 {tx}, {ty}에서 화면 클릭됨"
 
             elif name == "mobile_list_elements_on_screen":
                 require_robot()
