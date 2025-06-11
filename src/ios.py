@@ -151,7 +151,14 @@ class IosRobot(Robot):
     ) -> None:
         """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
         wda = await self._wda()
-        await wda.swipe_between_points(start_x, start_y, end_x, end_y)
+        screen = await wda.get_screen_size()
+        scale = screen.scale if screen else 1
+        await wda.swipe_between_points(
+            int(start_x / scale),
+            int(start_y / scale),
+            int(end_x / scale),
+            int(end_y / scale),
+        )
     
     async def list_apps(self) -> List[InstalledApp]:
         """설치된 앱 목록을 가져옵니다."""
@@ -200,7 +207,9 @@ class IosRobot(Robot):
     async def tap(self, x: int, y: int) -> None:
         """지정된 좌표를 탭합니다."""
         wda = await self._wda()
-        await wda.tap(x, y)
+        screen = await wda.get_screen_size()
+        scale = screen.scale if screen else 1
+        await wda.tap(int(x / scale), int(y / scale))
     
     async def get_elements_on_screen(self) -> List[ScreenElement]:
         """화면의 모든 요소를 가져옵니다."""
