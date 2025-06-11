@@ -189,6 +189,19 @@ If you see only the English keyboard when typing, add the Korean keyboard in the
 - **Android:** `Settings` → `System` → `Languages & input` → `Virtual keyboard` → `Gboard` → `Languages` → `Add keyboard` and choose **Korean**.
 - **iOS:** `Settings` → `General` → `Keyboard` → `Keyboards` → `Add New Keyboard` and select **Korean**.
 
+## Troubleshooting
+
+If your client or editor shows the message:
+
+```
+The model returned an error. Try disabling MCP servers, or switch models.
+```
+
+the MCP server might not be running or reachable. Launch `mobile-mcp` manually
+using `python -m src.main` (or `mobile-mcp` if installed). If you want to stop
+using MCP, remove the server entry from your MCP settings so the client no
+longer attempts to connect.
+
 # Thanks to all contributors ❤️
 
 ### We appreciate everyone who has helped improve this project. 
