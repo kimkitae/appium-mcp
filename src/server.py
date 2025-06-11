@@ -317,7 +317,7 @@ def create_mcp_server() -> Server:
                 screen_size = await robot.get_screen_size()
                 result = f"화면 크기: {screen_size.width}x{screen_size.height} 픽셀"
 
-           elif name == "mobile_click_on_screen_at_coordinates":
+            elif name == "mobile_click_on_screen_at_coordinates":
                 require_robot()
                 x = arguments["x"]
                 y = arguments["y"]
