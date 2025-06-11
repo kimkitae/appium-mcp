@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 
 from .__init__ import __version__
 from .android import AndroidDeviceManager, AndroidRobot
-from .image_utils import Image, is_imagemagick_installed
 from .ios import IosManager, IosRobot
 from .iphone_simulator import SimctlManager
 from .logger import error, trace
@@ -321,13 +320,10 @@ def create_mcp_server() -> Server:
                 require_robot()
                 x = arguments["x"]
                 y = arguments["y"]
-                screen_size = await robot.get_screen_size()
-                scale = screen_size.scale if screen_size else 1
 
-                # 터치 좌표는 스크린샷에서 얻은 값일 수 있으므로
-                # 스크린샷 축소 배율(scale)을 적용해 실제 좌표로 보정합니다
-                tx = int(x * scale)
-                ty = int(y * scale)
+                # 스크린샷을 원본 크기로 전송하므로, 전달받은 좌표는 그대로 사용합니다
+                tx = int(x)
+                ty = int(y)
 
                 await robot.tap(tx, ty)
                 result = f"좌표 {tx}, {ty}에서 화면 클릭됨"
@@ -346,10 +342,10 @@ def create_mcp_server() -> Server:
                         "value": element.value,
                         "identifier": element.identifier,
                         "coordinates": {
-                            "x": element.rect.x,
-                            "y": element.rect.y,
-                            "width": element.rect.width,
-                            "height": element.rect.height,
+                            "x": int(element.rect.x * scale),
+                            "y": int(element.rect.y * scale),
+                            "width": int(element.rect.width * scale),
+                            "height": int(element.rect.height * scale),
                         },
                     }
                     if element.focused:
@@ -389,7 +385,6 @@ def create_mcp_server() -> Server:
 
             elif name == "mobile_take_screenshot":
                 require_robot()
-                screen_size = await robot.get_screen_size()
                 screenshot = await robot.get_screenshot()
                 mime_type = "image/png"
 
@@ -399,18 +394,7 @@ def create_mcp_server() -> Server:
                 if png_size.width <= 0 or png_size.height <= 0:
                     raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
 
-                if is_imagemagick_installed():
-                    trace("ImageMagick이 설치되어 있습니다. 스크린샷 크기 조정 중")
-                    img = Image.from_buffer(screenshot)
-                    before_size = len(screenshot)
-                    screenshot = (
-                        img.resize(int(png_size.width / screen_size.scale))
-                        .jpeg({"quality": 75})
-                        .to_buffer()
-                    )
-                    after_size = len(screenshot)
-                    trace(f"스크린샷 크기 조정됨: {before_size} 바이트에서 {after_size} 바이트로")
-                    mime_type = "image/jpeg"
+                # 이미지 크기를 조정하지 않고 원본을 그대로 사용합니다
 
                 screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
                 trace(f"스크린샷 촬영됨: {len(screenshot)} 바이트")
@@ -433,23 +417,13 @@ def create_mcp_server() -> Server:
                 if png_size.width <= 0 or png_size.height <= 0:
                     raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
 
-                if is_imagemagick_installed():
-                    trace("ImageMagick이 설치되어 있습니다. 스크린샷 크기 조정 중")
-                    img = Image.from_buffer(screenshot)
-                    before_size = len(screenshot)
-                    screenshot = (
-                        img.resize(int(png_size.width / screen_size.scale))
-                        .jpeg({"quality": 75})
-                        .to_buffer()
-                    )
-                    after_size = len(screenshot)
-                    trace(f"스크린샷 크기 조정됨: {before_size} 바이트에서 {after_size} 바이트로")
-                    mime_type = "image/jpeg"
+                # 이미지 크기를 조정하지 않고 원본을 그대로 사용합니다
 
                 screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
                 trace(f"스크린샷 촬영됨: {len(screenshot)} 바이트")
 
                 element_list = []
+                scale = screen_size.scale if screen_size else 1
                 for element in elements:
                     elem_dict = {
                         "type": element.type,
@@ -459,10 +433,10 @@ def create_mcp_server() -> Server:
                         "value": element.value,
                         "identifier": element.identifier,
                         "coordinates": {
-                            "x": element.rect.x,
-                            "y": element.rect.y,
-                            "width": element.rect.width,
-                            "height": element.rect.height,
+                            "x": int(element.rect.x * scale),
+                            "y": int(element.rect.y * scale),
+                            "width": int(element.rect.width * scale),
+                            "height": int(element.rect.height * scale),
                         },
                     }
                     if element.focused:
