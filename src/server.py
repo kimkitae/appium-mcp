@@ -213,6 +213,14 @@ def create_mcp_server() -> Server:
                 },
             ),
             Tool(
+                name="mobile_get_ui_state",
+                description="페이지 소스와 스크린샷을 동시에 가져와 화면 구성과 이미지를 확인합니다.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                },
+            ),
+            Tool(
                 name="mobile_set_orientation",
                 description="디바이스의 화면 방향을 변경합니다.",
                 inputSchema={
@@ -408,6 +416,65 @@ def create_mcp_server() -> Server:
                 trace(f"스크린샷 촬영됨: {len(screenshot)} 바이트")
 
                 return [ImageContent(type="image", data=screenshot_b64, mimeType=mime_type)]
+
+            elif name == "mobile_get_ui_state":
+                require_robot()
+                screen_size_task = asyncio.create_task(robot.get_screen_size())
+                screenshot_task = asyncio.create_task(robot.get_screenshot())
+                elements_task = asyncio.create_task(robot.get_elements_on_screen())
+
+                screen_size = await screen_size_task
+                screenshot = await screenshot_task
+                elements = await elements_task
+                mime_type = "image/png"
+
+                image = PNG(screenshot)
+                png_size = image.get_dimensions()
+                if png_size.width <= 0 or png_size.height <= 0:
+                    raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
+
+                if is_imagemagick_installed():
+                    trace("ImageMagick이 설치되어 있습니다. 스크린샷 크기 조정 중")
+                    img = Image.from_buffer(screenshot)
+                    before_size = len(screenshot)
+                    screenshot = (
+                        img.resize(int(png_size.width / screen_size.scale))
+                        .jpeg({"quality": 75})
+                        .to_buffer()
+                    )
+                    after_size = len(screenshot)
+                    trace(f"스크린샷 크기 조정됨: {before_size} 바이트에서 {after_size} 바이트로")
+                    mime_type = "image/jpeg"
+
+                screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
+                trace(f"스크린샷 촬영됨: {len(screenshot)} 바이트")
+
+                element_list = []
+                for element in elements:
+                    elem_dict = {
+                        "type": element.type,
+                        "text": element.text,
+                        "label": element.label,
+                        "name": element.name,
+                        "value": element.value,
+                        "identifier": element.identifier,
+                        "coordinates": {
+                            "x": element.rect.x,
+                            "y": element.rect.y,
+                            "width": element.rect.width,
+                            "height": element.rect.height,
+                        },
+                    }
+                    if element.focused:
+                        elem_dict["focused"] = True
+                    element_list.append(elem_dict)
+
+                result = f"화면에서 발견된 요소: {json.dumps(element_list)}"
+
+                return [
+                    TextContent(type="text", text=result),
+                    ImageContent(type="image", data=screenshot_b64, mimeType=mime_type),
+                ]
 
             elif name == "mobile_set_orientation":
                 require_robot()
