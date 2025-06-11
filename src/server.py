@@ -374,11 +374,9 @@ def create_mcp_server() -> Server:
 
             elif name == "swipe_on_screen":
                 require_robot()
-                if "direction" in arguments:
-                    direction = arguments["direction"]
-                    await robot.swipe(direction)
-                    result = f"화면에서 {direction} 방향으로 스와이프됨"
-                elif all(key in arguments for key in ("start_x", "start_y", "end_x", "end_y")):
+                if all(
+                    key in arguments for key in ("start_x", "start_y", "end_x", "end_y")
+                ):
                     start_x = arguments["start_x"]
                     start_y = arguments["start_y"]
                     end_x = arguments["end_x"]
@@ -387,6 +385,10 @@ def create_mcp_server() -> Server:
                     result = (
                         f"화면에서 ({start_x},{start_y}) -> ({end_x},{end_y}) 로 스와이프됨"
                     )
+                elif "direction" in arguments:
+                    direction = arguments["direction"]
+                    await robot.swipe(direction)
+                    result = f"화면에서 {direction} 방향으로 스와이프됨"
                 else:
                     raise ActionableError(
                         "direction 인자 또는 start_x, start_y, end_x, end_y 인자 모두가 필요합니다."
