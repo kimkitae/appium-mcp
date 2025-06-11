@@ -117,7 +117,7 @@ export class AndroidRobot implements Robot {
 			.map(line => line.split(/\s+/)[8]); // get process name
 	}
 
-	public async swipe(direction: SwipeDirection): Promise<void> {
+        public async swipe(direction: SwipeDirection): Promise<void> {
 		const screenSize = await this.getScreenSize();
                 const centerX = screenSize.width >> 1;
                 const centerY = screenSize.height >> 1;
@@ -149,8 +149,21 @@ export class AndroidRobot implements Robot {
                                 throw new ActionableError(`Swipe direction "${direction}" is not supported`);
                 }
 
-		this.adb("shell", "input", "swipe", `${x0}`, `${y0}`, `${x1}`, `${y1}`, "1000");
-	}
+                this.adb("shell", "input", "swipe", `${x0}`, `${y0}`, `${x1}`, `${y1}`, "1000");
+        }
+
+        public async swipeBetweenPoints(startX: number, startY: number, endX: number, endY: number): Promise<void> {
+                this.adb(
+                        "shell",
+                        "input",
+                        "swipe",
+                        `${startX}`,
+                        `${startY}`,
+                        `${endX}`,
+                        `${endY}`,
+                        "1000"
+                );
+        }
 
 	public async getScreenshot(): Promise<Buffer> {
 		return this.adb("exec-out", "screencap", "-p");

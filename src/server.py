@@ -186,9 +186,16 @@ def create_mcp_server() -> Server:
                             "type": "string",
                             "enum": ["up", "down", "left", "right"],
                             "description": "스와이프 방향",
-                        }
+                        },
+                        "start_x": {"type": "integer", "description": "시작 X 좌표"},
+                        "start_y": {"type": "integer", "description": "시작 Y 좌표"},
+                        "end_x": {"type": "integer", "description": "끝 X 좌표"},
+                        "end_y": {"type": "integer", "description": "끝 Y 좌표"},
                     },
-                    "required": ["direction"],
+                    "anyOf": [
+                        {"required": ["direction"]},
+                        {"required": ["start_x", "start_y", "end_x", "end_y"]},
+                    ],
                 },
             ),
             Tool(
@@ -368,9 +375,19 @@ def create_mcp_server() -> Server:
 
             elif name == "swipe_on_screen":
                 require_robot()
-                direction = arguments["direction"]
-                await robot.swipe(direction)
-                result = f"화면에서 {direction} 방향으로 스와이프됨"
+                if "direction" in arguments:
+                    direction = arguments["direction"]
+                    await robot.swipe(direction)
+                    result = f"화면에서 {direction} 방향으로 스와이프됨"
+                else:
+                    start_x = arguments["start_x"]
+                    start_y = arguments["start_y"]
+                    end_x = arguments["end_x"]
+                    end_y = arguments["end_y"]
+                    await robot.swipe_between_points(start_x, start_y, end_x, end_y)
+                    result = (
+                        f"화면에서 ({start_x},{start_y}) -> ({end_x},{end_y}) 로 스와이프됨"
+                    )
 
             elif name == "mobile_type_keys":
                 require_robot()

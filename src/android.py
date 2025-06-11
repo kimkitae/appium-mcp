@@ -189,6 +189,19 @@ class AndroidRobot(Robot):
 
         self.adb("shell", "input", "swipe", str(x0), str(y0), str(x1), str(y1), "1000")
 
+    async def swipe_between_points(self, start_x: int, start_y: int, end_x: int, end_y: int) -> None:
+        """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
+        self.adb(
+            "shell",
+            "input",
+            "swipe",
+            str(start_x),
+            str(start_y),
+            str(end_x),
+            str(end_y),
+            "1000",
+        )
+
     async def get_screenshot(self) -> bytes:
         """스크린샷을 가져옵니다."""
         return self.adb("exec-out", "screencap", "-p")

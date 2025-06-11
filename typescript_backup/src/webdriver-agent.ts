@@ -267,8 +267,34 @@ export class WebDriverAgent {
 					]
 				}),
 			});
-		});
-	}
+                });
+        }
+
+        public async swipeBetweenPoints(startX: number, startY: number, endX: number, endY: number) {
+                await this.withinSession(async sessionUrl => {
+                        const url = `${sessionUrl}/actions`;
+                        await fetch(url, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                        actions: [
+                                                {
+                                                        type: "pointer",
+                                                        id: "finger1",
+                                                        parameters: { pointerType: "touch" },
+                                                        actions: [
+                                                                { type: "pointerMove", duration: 0, x: startX, y: startY },
+                                                                { type: "pointerDown", button: 0 },
+                                                                { type: "pointerMove", duration: 0, x: endX, y: endY },
+                                                                { type: "pause", duration: 1000 },
+                                                                { type: "pointerUp", button: 0 }
+                                                        ]
+                                                }
+                                        ]
+                                })
+                        });
+                });
+        }
 
 	public async setOrientation(orientation: Orientation): Promise<void> {
 		await this.withinSession(async sessionUrl => {

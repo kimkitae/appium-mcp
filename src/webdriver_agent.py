@@ -315,6 +315,45 @@ class WebDriverAgent:
 
         await self.within_session(_swipe)
 
+    async def swipe_between_points(
+        self, start_x: int, start_y: int, end_x: int, end_y: int
+    ) -> None:
+        """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
+
+        async def _swipe(session_url: str) -> None:
+            url = f"{session_url}/actions"
+            actions = {
+                "actions": [
+                    {
+                        "type": "pointer",
+                        "id": "finger1",
+                        "parameters": {"pointerType": "touch"},
+                        "actions": [
+                            {
+                                "type": "pointerMove",
+                                "duration": 0,
+                                "x": start_x,
+                                "y": start_y,
+                            },
+                            {"type": "pointerDown", "button": 0},
+                            {
+                                "type": "pointerMove",
+                                "duration": 0,
+                                "x": end_x,
+                                "y": end_y,
+                            },
+                            {"type": "pause", "duration": 1000},
+                            {"type": "pointerUp", "button": 0},
+                        ],
+                    }
+                ]
+            }
+
+            async with aiohttp.ClientSession() as session:
+                await session.post(url, json=actions)
+
+        await self.within_session(_swipe)
+
     async def set_orientation(self, orientation: Orientation) -> None:
         """화면 방향을 설정합니다."""
 

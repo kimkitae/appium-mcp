@@ -269,12 +269,21 @@ export const createMcpServer = (): McpServer => {
                 "swipe_on_screen",
                 "Swipe on the screen",
                 {
-                        direction: z.enum(["up", "down", "left", "right"]).describe("The direction to swipe"),
+                        direction: z.enum(["up", "down", "left", "right"]).describe("The direction to swipe").optional(),
+                        start_x: z.number().int().describe("Start X coordinate").optional(),
+                        start_y: z.number().int().describe("Start Y coordinate").optional(),
+                        end_x: z.number().int().describe("End X coordinate").optional(),
+                        end_y: z.number().int().describe("End Y coordinate").optional(),
                 },
-                async ({ direction }) => {
+                async ({ direction, start_x, start_y, end_x, end_y }) => {
                         requireRobot();
-                        await robot!.swipe(direction);
-                        return `Swiped ${direction} on screen`;
+                        if (direction) {
+                                await robot!.swipe(direction);
+                                return `Swiped ${direction} on screen`;
+                        } else {
+                                await robot!.swipeBetweenPoints(start_x!, start_y!, end_x!, end_y!);
+                                return `Swiped (${start_x},${start_y}) -> (${end_x},${end_y})`;
+                        }
                 }
         );
 
