@@ -161,6 +161,16 @@ What you will need to connect MCP with your agent and mobile devices:
 - [node.js](https://nodejs.org/en/download/)
 - [MCP](https://modelcontextprotocol.io/introduction) supported foundational models or agents, like [Claude MCP](https://modelcontextprotocol.io/quickstart/server), [OpenAI Agent SDK](https://openai.github.io/openai-agents-python/mcp/), [Copilot Studio](https://www.microsoft.com/en-us/microsoft-copilot/blog/copilot-studio/introducing-model-context-protocol-mcp-in-copilot-studio-simplified-integration-with-ai-apps-and-agents/)
 
+### Python dependencies
+
+If you plan to run the Python version of Mobile MCP locally, make sure to install the required packages first:
+
+```bash
+pip install -r requirements.txt
+```
+
+You can also install in editable mode with `pip install -e .`. See `README_python.md` for more details.
+
 ### Simulators, Emulators, and Physical Devices
 
 When launched, Mobile MCP can connect to:
