@@ -192,10 +192,7 @@ def create_mcp_server() -> Server:
                         "end_x": {"type": "integer", "description": "끝 X 좌표"},
                         "end_y": {"type": "integer", "description": "끝 Y 좌표"},
                     },
-                    "anyOf": [
-                        {"required": ["direction"]},
-                        {"required": ["start_x", "start_y", "end_x", "end_y"]},
-                    ],
+                    "required": [],
                 },
             ),
             Tool(
@@ -381,7 +378,7 @@ def create_mcp_server() -> Server:
                     direction = arguments["direction"]
                     await robot.swipe(direction)
                     result = f"화면에서 {direction} 방향으로 스와이프됨"
-                else:
+                elif all(key in arguments for key in ("start_x", "start_y", "end_x", "end_y")):
                     start_x = arguments["start_x"]
                     start_y = arguments["start_y"]
                     end_x = arguments["end_x"]
@@ -389,6 +386,10 @@ def create_mcp_server() -> Server:
                     await robot.swipe_between_points(start_x, start_y, end_x, end_y)
                     result = (
                         f"화면에서 ({start_x},{start_y}) -> ({end_x},{end_y}) 로 스와이프됨"
+                    )
+                else:
+                    raise ActionableError(
+                        "direction 인자 또는 start_x, start_y, end_x, end_y 인자 모두가 필요합니다."
                     )
 
             elif name == "mobile_type_keys":
