@@ -337,6 +337,8 @@ def create_mcp_server() -> Server:
 
             elif name == "mobile_list_elements_on_screen":
                 require_robot()
+                screen_size = await robot.get_screen_size()
+                scale = screen_size.scale if screen_size else 1
                 elements = await robot.get_elements_on_screen()
 
                 element_list = []
