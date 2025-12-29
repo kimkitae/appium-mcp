@@ -3,6 +3,8 @@ import argparse
 import asyncio
 import sys
 import json
+import os
+import secrets
 
 from .server import create_mcp_server
 from .logger import error, trace
@@ -23,13 +25,20 @@ async def run_stdio():
         )
 
 
-async def run_sse(host: str, port: int):
+def generate_token() -> str:
+    """안전한 랜덤 토큰 생성"""
+    return secrets.token_urlsafe(32)
+
+
+async def run_sse(host: str, port: int, token: str | None):
     """SSE 모드로 HTTP 서버 실행 (원격 연결용)"""
     try:
         from mcp.server.sse import SseServerTransport
         from starlette.applications import Starlette
         from starlette.routing import Route
-        from starlette.responses import JSONResponse
+        from starlette.responses import JSONResponse, Response
+        from starlette.middleware import Middleware
+        from starlette.middleware.base import BaseHTTPMiddleware
         import uvicorn
     except ImportError as e:
         print(f"SSE 모드에 필요한 패키지가 없습니다: {e}")
@@ -38,6 +47,43 @@ async def run_sse(host: str, port: int):
 
     server = create_mcp_server()
     sse = SseServerTransport("/messages/")
+
+    # 토큰 인증 미들웨어
+    class TokenAuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            # 헬스체크는 인증 없이 허용
+            if request.url.path == "/health":
+                return await call_next(request)
+
+            # 토큰이 설정된 경우에만 검증
+            if token:
+                auth_header = request.headers.get("Authorization", "")
+
+                # Bearer 토큰 또는 쿼리 파라미터로 토큰 확인
+                token_from_header = None
+                if auth_header.startswith("Bearer "):
+                    token_from_header = auth_header[7:]
+
+                token_from_query = request.query_params.get("token")
+
+                provided_token = token_from_header or token_from_query
+
+                if not provided_token:
+                    return Response(
+                        content=json.dumps({"error": "인증 토큰이 필요합니다"}),
+                        status_code=401,
+                        media_type="application/json"
+                    )
+
+                if not secrets.compare_digest(provided_token, token):
+                    trace(f"잘못된 토큰 시도: {request.client}")
+                    return Response(
+                        content=json.dumps({"error": "유효하지 않은 토큰입니다"}),
+                        status_code=403,
+                        media_type="application/json"
+                    )
+
+            return await call_next(request)
 
     async def handle_sse(request):
         """SSE 연결 핸들러"""
@@ -57,17 +103,38 @@ async def run_sse(host: str, port: int):
 
     async def health(request):
         """헬스체크"""
-        return JSONResponse({"status": "ok", "server": "mobile-mcp"})
+        return JSONResponse({
+            "status": "ok",
+            "server": "mobile-mcp",
+            "auth_required": token is not None
+        })
 
     # Starlette 앱 설정
+    middleware = [Middleware(TokenAuthMiddleware)] if token else []
+
     app = Starlette(
         debug=False,
         routes=[
             Route("/sse", handle_sse),
             Route("/messages/", handle_messages, methods=["POST"]),
             Route("/health", health),
-        ]
+        ],
+        middleware=middleware
     )
+
+    # 토큰 정보 표시
+    auth_info = ""
+    if token:
+        auth_info = f"""
+║  Auth Token:    {token}
+║
+║  인증 방법:
+║    1. Header: Authorization: Bearer {token}
+║    2. Query:  ?token={token}"""
+        masked_token = token[:8] + "..." + token[-4:]
+    else:
+        auth_info = "║  Auth Token:    없음 (누구나 접속 가능)"
+        masked_token = None
 
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
@@ -77,9 +144,34 @@ async def run_sse(host: str, port: int):
 ║  SSE Endpoint:  http://{host}:{port}/sse
 ║  Messages:      http://{host}:{port}/messages/
 ║  Health Check:  http://{host}:{port}/health
+{auth_info}
 ╚══════════════════════════════════════════════════════════════╝
+""")
 
-Claude Desktop 설정 예시 (claude_desktop_config.json):
+    if token:
+        print(f"""Claude Desktop 설정 예시 (claude_desktop_config.json):
+{{
+  "mcpServers": {{
+    "mobile-mcp": {{
+      "url": "http://{host}:{port}/sse?token={token}"
+    }}
+  }}
+}}
+
+또는 환경변수로 토큰 전달:
+{{
+  "mcpServers": {{
+    "mobile-mcp": {{
+      "url": "http://{host}:{port}/sse",
+      "headers": {{
+        "Authorization": "Bearer {token}"
+      }}
+    }}
+  }}
+}}
+""")
+    else:
+        print(f"""Claude Desktop 설정 예시 (claude_desktop_config.json):
 {{
   "mcpServers": {{
     "mobile-mcp": {{
@@ -88,23 +180,25 @@ Claude Desktop 설정 예시 (claude_desktop_config.json):
   }}
 }}
 
-Press Ctrl+C to stop the server.
+⚠️  경고: 토큰 없이 실행 중입니다. --token 옵션으로 인증을 활성화하세요.
 """)
 
-    error(f"mobile-mcp SSE 서버가 {host}:{port}에서 실행 중입니다")
+    print("Press Ctrl+C to stop the server.\n")
+
+    error(f"mobile-mcp SSE 서버가 {host}:{port}에서 실행 중입니다 (인증: {'활성화' if token else '비활성화'})")
 
     config = uvicorn.Config(app, host=host, port=port, log_level="info")
     server_instance = uvicorn.Server(config)
     await server_instance.serve()
 
 
-async def async_main(mode: str, host: str, port: int):
+async def async_main(mode: str, host: str, port: int, token: str | None):
     """메인 비동기 함수"""
     try:
         if mode == "stdio":
             await run_stdio()
         elif mode == "sse":
-            await run_sse(host, port)
+            await run_sse(host, port, token)
         else:
             error(f"알 수 없는 모드: {mode}")
             sys.exit(1)
@@ -129,7 +223,14 @@ def main() -> None:
   mobile-mcp --mode sse
   mobile-mcp --mode sse --host 0.0.0.0 --port 8080
 
-  # Ubuntu 서버에서 실행 (외부 접속 허용)
+  # 토큰 인증 활성화 (권장)
+  mobile-mcp --mode sse --host 0.0.0.0 --port 3000 --token my-secret-token
+
+  # 자동 토큰 생성
+  mobile-mcp --mode sse --host 0.0.0.0 --port 3000 --token auto
+
+  # 환경변수로 토큰 설정
+  export MOBILE_MCP_TOKEN=my-secret-token
   mobile-mcp --mode sse --host 0.0.0.0 --port 3000
 """
     )
@@ -150,13 +251,27 @@ def main() -> None:
     parser.add_argument(
         "--port", "-p",
         type=int,
-        default=3000,
-        help="SSE 모드에서 사용할 포트. 기본값: 3000"
+        default=51821,
+        help="SSE 모드에서 사용할 포트. 기본값: 51821"
+    )
+
+    parser.add_argument(
+        "--token", "-t",
+        default=None,
+        help="SSE 모드에서 사용할 인증 토큰. 'auto'로 설정하면 자동 생성. 환경변수 MOBILE_MCP_TOKEN으로도 설정 가능"
     )
 
     args = parser.parse_args()
 
-    asyncio.run(async_main(args.mode, args.host, args.port))
+    # 토큰 결정: CLI 인자 > 환경변수
+    token = args.token or os.environ.get("MOBILE_MCP_TOKEN")
+
+    # 'auto'면 자동 생성
+    if token == "auto":
+        token = generate_token()
+        print(f"자동 생성된 토큰: {token}")
+
+    asyncio.run(async_main(args.mode, args.host, args.port, token))
 
 
 def run() -> None:

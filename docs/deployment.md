@@ -87,7 +87,7 @@ pip install -e ".[sse]"
 mobile-mcp --mode sse
 
 # 외부 접속 허용
-mobile-mcp --mode sse --host 0.0.0.0 --port 3000
+mobile-mcp --mode sse --host 0.0.0.0 --port 51821
 
 # 커스텀 포트
 mobile-mcp --mode sse --host 0.0.0.0 --port 8080
@@ -107,7 +107,7 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/appium-mcp
 Environment=PATH=/home/ubuntu/appium-mcp/venv/bin:/usr/bin
-ExecStart=/home/ubuntu/appium-mcp/venv/bin/mobile-mcp --mode sse --host 0.0.0.0 --port 3000
+ExecStart=/home/ubuntu/appium-mcp/venv/bin/mobile-mcp --mode sse --host 0.0.0.0 --port 51821
 Restart=always
 RestartSec=10
 
@@ -151,10 +151,10 @@ RUN pip install -e ".[sse]"
 ENV ANDROID_HOME=/usr/lib/android-sdk
 
 # 포트 노출
-EXPOSE 3000
+EXPOSE 51821
 
-# 실행
-CMD ["mobile-mcp", "--mode", "sse", "--host", "0.0.0.0", "--port", "3000"]
+# 실행 (토큰은 환경변수로 전달)
+CMD ["mobile-mcp", "--mode", "sse", "--host", "0.0.0.0", "--port", "51821"]
 ```
 
 ```bash
@@ -166,8 +166,35 @@ docker run -d \
   --name mobile-mcp \
   --privileged \
   -v /dev/bus/usb:/dev/bus/usb \
-  -p 3000:3000 \
+  -v ~/.android:/root/.android:ro \
+  -e MOBILE_MCP_TOKEN=your-secret-token \
+  -p 51821:51821 \
   mobile-mcp
+```
+
+### Docker Compose 배포 (권장)
+
+`docker-compose.yml` 파일이 프로젝트 루트에 포함되어 있습니다:
+
+```bash
+# .env 파일 생성 (선택사항)
+echo "MOBILE_MCP_TOKEN=your-secret-token" > .env
+
+# 빌드 및 실행
+docker-compose up -d
+
+# 로그 확인
+docker-compose logs -f
+
+# 중지
+docker-compose down
+```
+
+토큰을 자동 생성하려면:
+```bash
+# MOBILE_MCP_TOKEN을 설정하지 않으면 자동 생성됨
+docker-compose up -d
+docker-compose logs | grep "자동 생성된 토큰"
 ```
 
 ---
@@ -182,7 +209,7 @@ docker run -d \
 {
   "mcpServers": {
     "mobile-mcp": {
-      "url": "http://your-server-ip:3000/sse"
+      "url": "http://your-server-ip:51821/sse"
     }
   }
 }
@@ -193,7 +220,7 @@ docker run -d \
 ```bash
 # 현재 Claude Code는 stdio만 지원
 # SSH 터널링 사용
-ssh -L 3000:localhost:3000 user@your-server
+ssh -L 51821:localhost:51821 user@your-server
 
 # 또는 socat으로 stdio-to-TCP 변환
 ```
@@ -205,7 +232,7 @@ from mcp import ClientSession
 from mcp.client.sse import sse_client
 
 async def connect_remote():
-    async with sse_client("http://your-server:3000/sse") as (read, write):
+    async with sse_client("http://your-server:51821/sse") as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
 
@@ -229,10 +256,10 @@ async def connect_remote():
 
 ```bash
 # UFW 사용 시
-sudo ufw allow 3000/tcp
+sudo ufw allow 51821/tcp
 
 # iptables 사용 시
-sudo iptables -A INPUT -p tcp --dport 3000 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 51821 -j ACCEPT
 ```
 
 ### Nginx 리버스 프록시 (선택사항)
@@ -245,7 +272,7 @@ server {
     server_name mcp.your-domain.com;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:51821;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -281,7 +308,7 @@ sudo certbot --nginx -d mcp.your-domain.com
 
 ```bash
 # 서버 상태 확인
-curl http://your-server:3000/health
+curl http://your-server:51821/health
 
 # 응답
 {"status": "ok", "server": "mobile-mcp"}
