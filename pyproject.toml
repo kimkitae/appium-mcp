@@ -18,6 +18,16 @@ dependencies = [
     "pydantic>=2.0.0",
 ]
 
+[project.optional-dependencies]
+sse = [
+    "starlette>=0.27.0",
+    "uvicorn>=0.23.0",
+]
+all = [
+    "starlette>=0.27.0",
+    "uvicorn>=0.23.0",
+]
+
 [project.scripts]
 mobile-mcp = "src.main:main"
 
