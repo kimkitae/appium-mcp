@@ -9,8 +9,9 @@ from dataclasses import dataclass
 import secrets
 
 from .webdriver_agent import WebDriverAgent
+from typing import Optional as OptionalType
 from .robot import (
-    ActionableError, Button, InstalledApp, Robot, ScreenSize, 
+    ActionableError, Button, InstalledApp, Robot, ScreenSize,
     SwipeDirection, ScreenElement, Orientation
 )
 
@@ -149,17 +150,17 @@ class IosRobot(Robot):
     async def swipe_between_points(
         self, start_x: int, start_y: int, end_x: int, end_y: int
     ) -> None:
-        """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
+        """지정된 좌표에서 다른 좌표까지 스와이프합니다. 좌표는 포인트(논리적) 단위."""
         wda = await self._wda()
-        screen = await wda.get_screen_size()
-        scale = screen.scale if screen else 1
-        await wda.swipe_between_points(
-            int(start_x / scale),
-            int(start_y / scale),
-            int(end_x / scale),
-            int(end_y / scale),
-        )
-    
+        await wda.swipe_between_points(start_x, start_y, end_x, end_y)
+
+    async def swipe_from_coordinate(
+        self, x: int, y: int, direction: SwipeDirection, distance: OptionalType[int] = None
+    ) -> None:
+        """지정된 좌표에서 특정 방향으로 스와이프합니다. 좌표는 포인트(논리적) 단위."""
+        wda = await self._wda()
+        await wda.swipe_from_coordinate(x, y, direction, distance)
+
     async def list_apps(self) -> List[InstalledApp]:
         """설치된 앱 목록을 가져옵니다."""
         await self._assert_tunnel_running()
@@ -205,12 +206,42 @@ class IosRobot(Robot):
         await wda.press_button(button)
     
     async def tap(self, x: int, y: int) -> None:
-        """지정된 좌표를 탭합니다."""
+        """지정된 좌표를 탭합니다. 좌표는 포인트(논리적) 단위."""
         wda = await self._wda()
-        screen = await wda.get_screen_size()
-        scale = screen.scale if screen else 1
-        await wda.tap(int(x / scale), int(y / scale))
-    
+        await wda.tap(x, y)
+
+    async def double_tap(self, x: int, y: int) -> None:
+        """지정된 좌표를 더블탭합니다. 좌표는 포인트(논리적) 단위."""
+        wda = await self._wda()
+        await wda.double_tap(x, y)
+
+    async def long_press(self, x: int, y: int, duration: OptionalType[int] = None) -> None:
+        """지정된 좌표를 길게 누릅니다. 좌표는 포인트(논리적) 단위."""
+        wda = await self._wda()
+        await wda.long_press(x, y, duration)
+
+    async def install_app(self, path: str) -> None:
+        """IPA 파일을 설치합니다."""
+        await self._assert_tunnel_running()
+        try:
+            await self._ios("install", "--path", path)
+        except subprocess.CalledProcessError as e:
+            stdout = e.stdout if e.stdout else ""
+            stderr = e.stderr if e.stderr else ""
+            output = (stdout + stderr).strip()
+            raise ActionableError(output or str(e))
+
+    async def uninstall_app(self, bundle_id: str) -> None:
+        """앱을 삭제합니다."""
+        await self._assert_tunnel_running()
+        try:
+            await self._ios("uninstall", "--bundleid", bundle_id)
+        except subprocess.CalledProcessError as e:
+            stdout = e.stdout if e.stdout else ""
+            stderr = e.stderr if e.stderr else ""
+            output = (stdout + stderr).strip()
+            raise ActionableError(output or str(e))
+
     async def get_elements_on_screen(self) -> List[ScreenElement]:
         """화면의 모든 요소를 가져옵니다."""
         wda = await self._wda()

@@ -71,6 +71,12 @@ class Robot(Protocol):
     ) -> None:
         """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
         ...
+
+    async def swipe_from_coordinate(
+        self, x: int, y: int, direction: SwipeDirection, distance: Optional[int] = None
+    ) -> None:
+        """지정된 좌표에서 특정 방향으로 스와이프합니다."""
+        ...
     
     async def get_screenshot(self) -> bytes:
         """화면의 스크린샷을 가져옵니다. PNG 이미지가 포함된 bytes를 반환합니다."""
@@ -103,7 +109,23 @@ class Robot(Protocol):
     async def tap(self, x: int, y: int) -> None:
         """화면의 특정 좌표를 탭합니다."""
         ...
-    
+
+    async def double_tap(self, x: int, y: int) -> None:
+        """화면의 특정 좌표를 더블탭합니다."""
+        ...
+
+    async def long_press(self, x: int, y: int, duration: Optional[int] = None) -> None:
+        """화면의 특정 좌표를 길게 누릅니다. duration은 밀리초 단위."""
+        ...
+
+    async def install_app(self, path: str) -> None:
+        """앱을 설치합니다. path는 APK/IPA 파일 경로."""
+        ...
+
+    async def uninstall_app(self, package_name: str) -> None:
+        """앱을 삭제합니다."""
+        ...
+
     async def get_elements_on_screen(self) -> List[ScreenElement]:
         """화면의 모든 요소를 가져옵니다. 네이티브 앱에서만 작동합니다."""
         ...

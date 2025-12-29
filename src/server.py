@@ -16,6 +16,7 @@ from .iphone_simulator import SimctlManager
 from .logger import error, trace
 from .png import PNG
 from .robot import ActionableError, Robot
+from .image_utils import Image, is_scaling_available
 
 
 def get_agent_version() -> str:
@@ -126,6 +127,28 @@ def create_mcp_server() -> Server:
                 },
             ),
             Tool(
+                name="mobile_install_app",
+                description="APK(Android) 또는 IPA(iOS) 파일을 디바이스에 설치합니다.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "설치할 APK/IPA 파일 경로"}
+                    },
+                    "required": ["path"],
+                },
+            ),
+            Tool(
+                name="mobile_uninstall_app",
+                description="디바이스에서 앱을 삭제합니다.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "packageName": {"type": "string", "description": "삭제할 앱의 패키지 이름 (Android) 또는 Bundle ID (iOS)"}
+                    },
+                    "required": ["packageName"],
+                },
+            ),
+            Tool(
                 name="mobile_get_screen_size",
                 description="모바일 디바이스의 화면 크기를 픽셀 단위로 가져옵니다.",
                 inputSchema={
@@ -141,6 +164,31 @@ def create_mcp_server() -> Server:
                     "properties": {
                         "x": {"type": "number", "description": "화면에서 클릭할 x 좌표 (픽셀)"},
                         "y": {"type": "number", "description": "화면에서 클릭할 y 좌표 (픽셀)"},
+                    },
+                    "required": ["x", "y"],
+                },
+            ),
+            Tool(
+                name="mobile_double_tap_on_screen",
+                description="주어진 x,y 좌표에서 화면을 더블탭합니다.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "number", "description": "화면에서 더블탭할 x 좌표"},
+                        "y": {"type": "number", "description": "화면에서 더블탭할 y 좌표"},
+                    },
+                    "required": ["x", "y"],
+                },
+            ),
+            Tool(
+                name="mobile_long_press_on_screen_at_coordinates",
+                description="주어진 x,y 좌표에서 화면을 길게 누릅니다.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "number", "description": "화면에서 길게 누를 x 좌표"},
+                        "y": {"type": "number", "description": "화면에서 길게 누를 y 좌표"},
+                        "duration": {"type": "number", "description": "길게 누르는 시간 (밀리초). 기본값: Android 1000ms, iOS 500ms"},
                     },
                     "required": ["x", "y"],
                 },
@@ -177,8 +225,8 @@ def create_mcp_server() -> Server:
                 },
             ),
             Tool(
-                name="swipe_on_screen",
-                description="화면에서 스와이프합니다.",
+                name="mobile_swipe_on_screen",
+                description="화면에서 스와이프합니다. x, y 좌표를 제공하면 해당 위치에서 스와이프하고, 제공하지 않으면 화면 중앙에서 스와이프합니다.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -187,12 +235,11 @@ def create_mcp_server() -> Server:
                             "enum": ["up", "down", "left", "right"],
                             "description": "스와이프 방향",
                         },
-                        "start_x": {"type": "integer", "description": "시작 X 좌표"},
-                        "start_y": {"type": "integer", "description": "시작 Y 좌표"},
-                        "end_x": {"type": "integer", "description": "끝 X 좌표"},
-                        "end_y": {"type": "integer", "description": "끝 Y 좌표"},
+                        "x": {"type": "number", "description": "스와이프 시작 X 좌표 (픽셀). 제공하지 않으면 화면 중앙 사용"},
+                        "y": {"type": "number", "description": "스와이프 시작 Y 좌표 (픽셀). 제공하지 않으면 화면 중앙 사용"},
+                        "distance": {"type": "number", "description": "스와이프 거리 (픽셀). iOS 기본값 400px, Android 기본값 화면 크기의 30%"},
                     },
-                    "required": [],
+                    "required": ["direction"],
                 },
             ),
             Tool(
@@ -213,6 +260,17 @@ def create_mcp_server() -> Server:
                 inputSchema={
                     "type": "object",
                     "properties": {},
+                },
+            ),
+            Tool(
+                name="mobile_save_screenshot",
+                description="모바일 디바이스의 스크린샷을 파일로 저장합니다.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "스크린샷을 저장할 파일 경로 (.png 또는 .jpg)"}
+                    },
+                    "required": ["path"],
                 },
             ),
             Tool(
@@ -315,6 +373,18 @@ def create_mcp_server() -> Server:
                 await robot.terminate_app(package_name)
                 result = f"앱 종료됨: {package_name}"
 
+            elif name == "mobile_install_app":
+                require_robot()
+                path = arguments["path"]
+                await robot.install_app(path)
+                result = f"앱 설치됨: {path}"
+
+            elif name == "mobile_uninstall_app":
+                require_robot()
+                package_name = arguments["packageName"]
+                await robot.uninstall_app(package_name)
+                result = f"앱 삭제됨: {package_name}"
+
             elif name == "mobile_get_screen_size":
                 require_robot()
                 screen_size = await robot.get_screen_size()
@@ -325,19 +395,38 @@ def create_mcp_server() -> Server:
                 x = arguments["x"]
                 y = arguments["y"]
 
-                # 스크린샷을 원본 크기로 전송하므로, 전달받은 좌표는 그대로 사용합니다
+                # 좌표는 포인트(논리적) 단위로 전달 - 리사이즈된 스크린샷 및 list_elements_on_screen과 동일한 좌표계
                 tx = int(x)
                 ty = int(y)
 
                 await robot.tap(tx, ty)
                 result = f"좌표 {tx}, {ty}에서 화면 클릭됨"
 
+            elif name == "mobile_double_tap_on_screen":
+                require_robot()
+                x = arguments["x"]
+                y = arguments["y"]
+                tx = int(x)
+                ty = int(y)
+                await robot.double_tap(tx, ty)
+                result = f"좌표 {tx}, {ty}에서 더블탭됨"
+
+            elif name == "mobile_long_press_on_screen_at_coordinates":
+                require_robot()
+                x = arguments["x"]
+                y = arguments["y"]
+                duration = arguments.get("duration")
+                tx = int(x)
+                ty = int(y)
+                await robot.long_press(tx, ty, int(duration) if duration else None)
+                duration_text = f" ({int(duration)}ms)" if duration else ""
+                result = f"좌표 {tx}, {ty}에서 길게 누름{duration_text}"
+
             elif name == "mobile_list_elements_on_screen":
                 require_robot()
-                screen_size = await robot.get_screen_size()
-                scale = screen_size.scale if screen_size else 1
                 elements = await robot.get_elements_on_screen()
 
+                # 좌표는 포인트(논리적) 단위로 반환 - 리사이즈된 스크린샷과 동일한 좌표계
                 element_list = []
                 for element in elements:
                     elem_dict = {
@@ -348,10 +437,10 @@ def create_mcp_server() -> Server:
                         "value": element.value,
                         "identifier": element.identifier,
                         "coordinates": {
-                            "x": int(element.rect.x * scale),
-                            "y": int(element.rect.y * scale),
-                            "width": int(element.rect.width * scale),
-                            "height": int(element.rect.height * scale),
+                            "x": element.rect.x,
+                            "y": element.rect.y,
+                            "width": element.rect.width,
+                            "height": element.rect.height,
                         },
                     }
                     if element.focused:
@@ -372,27 +461,24 @@ def create_mcp_server() -> Server:
                 await robot.open_url(url)
                 result = f"URL 열림: {url}"
 
-            elif name == "swipe_on_screen":
+            elif name == "mobile_swipe_on_screen":
                 require_robot()
-                if all(
-                    key in arguments for key in ("start_x", "start_y", "end_x", "end_y")
-                ):
-                    start_x = arguments["start_x"]
-                    start_y = arguments["start_y"]
-                    end_x = arguments["end_x"]
-                    end_y = arguments["end_y"]
-                    await robot.swipe_between_points(start_x, start_y, end_x, end_y)
-                    result = (
-                        f"화면에서 ({start_x},{start_y}) -> ({end_x},{end_y}) 로 스와이프됨"
+                direction = arguments.get("direction")
+                x = arguments.get("x")
+                y = arguments.get("y")
+                distance = arguments.get("distance")
+
+                if x is not None and y is not None:
+                    # 좌표 기반 스와이프
+                    await robot.swipe_from_coordinate(
+                        int(x), int(y), direction, int(distance) if distance else None
                     )
-                elif "direction" in arguments:
-                    direction = arguments["direction"]
+                    distance_text = f" {int(distance)} 픽셀" if distance else ""
+                    result = f"좌표 ({int(x)}, {int(y)})에서 {direction} 방향으로{distance_text} 스와이프됨"
+                else:
+                    # 화면 중앙 스와이프
                     await robot.swipe(direction)
                     result = f"화면에서 {direction} 방향으로 스와이프됨"
-                else:
-                    raise ActionableError(
-                        "direction 인자 또는 start_x, start_y, end_x, end_y 인자 모두가 필요합니다."
-                    )
 
             elif name == "mobile_type_keys":
                 require_robot()
@@ -407,24 +493,58 @@ def create_mcp_server() -> Server:
 
             elif name == "mobile_take_screenshot":
                 require_robot()
+                screen_size = await robot.get_screen_size()
                 screenshot = await robot.get_screenshot()
                 mime_type = "image/png"
 
                 # PNG 유효성 검증
-                image = PNG(screenshot)
-                png_size = image.get_dimensions()
+                png_image = PNG(screenshot)
+                png_size = png_image.get_dimensions()
                 if png_size.width <= 0 or png_size.height <= 0:
                     raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
 
-                # 이미지 크기를 조정하지 않고 원본을 그대로 사용합니다
+                # 이미지 스케일링이 가능하면 크기를 줄여서 토큰 비용 절감
+                if is_scaling_available() and screen_size.scale > 1:
+                    trace("이미지 스케일링 가능, 스크린샷 리사이즈 중")
+                    before_size = len(screenshot)
+                    # 원본 해상도 / scale = 논리적 해상도로 변환
+                    target_width = int(png_size.width / screen_size.scale)
+                    img = Image.from_buffer(screenshot)
+                    screenshot = img.resize(target_width).jpeg({"quality": 75}).to_buffer()
+                    after_size = len(screenshot)
+                    trace(f"스크린샷 리사이즈: {before_size} -> {after_size} 바이트")
+                    mime_type = "image/jpeg"
 
                 screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
                 trace(f"스크린샷 촬영됨: {len(screenshot)} 바이트")
 
                 return [ImageContent(type="image", data=screenshot_b64, mimeType=mime_type)]
 
+            elif name == "mobile_save_screenshot":
+                require_robot()
+                path = arguments["path"]
+                screenshot = await robot.get_screenshot()
+
+                # PNG 유효성 검증
+                png_image = PNG(screenshot)
+                png_size = png_image.get_dimensions()
+                if png_size.width <= 0 or png_size.height <= 0:
+                    raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
+
+                # 파일 확장자에 따라 형식 결정
+                if path.lower().endswith(".jpg") or path.lower().endswith(".jpeg"):
+                    if is_scaling_available():
+                        img = Image.from_buffer(screenshot)
+                        screenshot = img.jpeg({"quality": 85}).to_buffer()
+
+                with open(path, "wb") as f:
+                    f.write(screenshot)
+
+                result = f"스크린샷 저장됨: {path} ({len(screenshot)} 바이트)"
+
             elif name == "mobile_get_ui_state":
                 require_robot()
+                # 병렬로 정보 수집
                 screen_size_task = asyncio.create_task(robot.get_screen_size())
                 screenshot_task = asyncio.create_task(robot.get_screenshot())
                 elements_task = asyncio.create_task(robot.get_elements_on_screen())
@@ -434,18 +554,27 @@ def create_mcp_server() -> Server:
                 elements = await elements_task
                 mime_type = "image/png"
 
-                image = PNG(screenshot)
-                png_size = image.get_dimensions()
+                png_image = PNG(screenshot)
+                png_size = png_image.get_dimensions()
                 if png_size.width <= 0 or png_size.height <= 0:
                     raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
 
-                # 이미지 크기를 조정하지 않고 원본을 그대로 사용합니다
+                # 이미지 스케일링 적용
+                if is_scaling_available() and screen_size.scale > 1:
+                    trace("이미지 스케일링 가능, 스크린샷 리사이즈 중")
+                    before_size = len(screenshot)
+                    target_width = int(png_size.width / screen_size.scale)
+                    img = Image.from_buffer(screenshot)
+                    screenshot = img.resize(target_width).jpeg({"quality": 75}).to_buffer()
+                    after_size = len(screenshot)
+                    trace(f"스크린샷 리사이즈: {before_size} -> {after_size} 바이트")
+                    mime_type = "image/jpeg"
 
                 screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
                 trace(f"스크린샷 촬영됨: {len(screenshot)} 바이트")
 
+                # 요소 좌표는 포인트(논리적) 단위로 반환 - 리사이즈된 이미지와 동일한 좌표계
                 element_list = []
-                scale = screen_size.scale if screen_size else 1
                 for element in elements:
                     elem_dict = {
                         "type": element.type,
@@ -455,10 +584,10 @@ def create_mcp_server() -> Server:
                         "value": element.value,
                         "identifier": element.identifier,
                         "coordinates": {
-                            "x": int(element.rect.x * scale),
-                            "y": int(element.rect.y * scale),
-                            "width": int(element.rect.width * scale),
-                            "height": int(element.rect.height * scale),
+                            "x": element.rect.x,
+                            "y": element.rect.y,
+                            "width": element.rect.width,
+                            "height": element.rect.height,
                         },
                     }
                     if element.focused:

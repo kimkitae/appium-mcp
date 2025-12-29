@@ -21,15 +21,24 @@ class DummySession:
         self.posts.append((url, json))
 
         class Resp:
+            ok = True
+            status = 200
+
             async def json(self_inner):
                 return {}
 
         return Resp()
 
+    async def delete(self, url):
+        """Mock delete method for clearing actions."""
+        pass
+
 
 class TestSwipeGestures(unittest.TestCase):
     def test_android_swipe_left(self):
+        """scale=1인 경우 논리적 좌표가 그대로 픽셀 좌표로 사용됩니다."""
         robot = AndroidRobot("serial")
+        robot._cached_scale = 1.0  # scale=1로 설정
         mock_size = ScreenSize(width=1000, height=2000, scale=1)
         with patch.object(
             robot, "get_screen_size", AsyncMock(return_value=mock_size)
@@ -42,7 +51,9 @@ class TestSwipeGestures(unittest.TestCase):
             self.assertEqual(args[3:], ("800", "1000", "200", "1000", "1000"))
 
     def test_android_swipe_between_points(self):
+        """scale=1인 경우 좌표가 그대로 사용됩니다."""
         robot = AndroidRobot("serial")
+        robot._cached_scale = 1.0  # scale=1로 설정
         with patch.object(robot, "adb") as mock_adb:
             asyncio.run(robot.swipe_between_points(10, 20, 30, 40))
             args = mock_adb.call_args[0]
@@ -51,17 +62,49 @@ class TestSwipeGestures(unittest.TestCase):
             self.assertEqual(args[2], "swipe")
             self.assertEqual(args[3:], ("10", "20", "30", "40", "1000"))
 
+    def test_android_swipe_between_points_with_scale(self):
+        """scale=2인 경우 좌표가 2배로 변환됩니다."""
+        robot = AndroidRobot("serial")
+        robot._cached_scale = 2.0  # scale=2로 설정 (고해상도 디바이스)
+        with patch.object(robot, "adb") as mock_adb:
+            # 논리적 좌표 (10, 20) → (30, 40)
+            asyncio.run(robot.swipe_between_points(10, 20, 30, 40))
+            args = mock_adb.call_args[0]
+            self.assertEqual(args[0], "shell")
+            self.assertEqual(args[1], "input")
+            self.assertEqual(args[2], "swipe")
+            # 픽셀 좌표로 변환: (20, 40) → (60, 80)
+            self.assertEqual(args[3:], ("20", "40", "60", "80", "1000"))
+
+    def test_android_tap_with_scale(self):
+        """scale=2.5인 경우 tap 좌표가 2.5배로 변환됩니다."""
+        robot = AndroidRobot("serial")
+        robot._cached_scale = 2.5  # scale=2.5 (420dpi 디바이스)
+        with patch.object(robot, "adb") as mock_adb:
+            # 논리적 좌표 (100, 200)
+            asyncio.run(robot.tap(100, 200))
+            args = mock_adb.call_args[0]
+            self.assertEqual(args[0], "shell")
+            self.assertEqual(args[1], "input")
+            self.assertEqual(args[2], "tap")
+            # 픽셀 좌표로 변환: (250, 500)
+            self.assertEqual(args[3:], ("250", "500"))
+
     def test_wda_swipe_right(self):
         wda = WebDriverAgent("localhost", 8100)
         posts = []
+
+        async def mock_within_session(fn):
+            return await fn("http://localhost:8100/session/1")
+
         with patch.object(
             wda,
             "get_screen_size",
             AsyncMock(return_value=WdaScreenSize(width=1000, height=1000, scale=1)),
         ), patch.object(
-            wda, "within_session", side_effect=lambda fn: fn("http://localhost:8100/session/1")
-        ), patch(
-            "aiohttp.ClientSession", lambda: DummySession(posts)
+            wda, "within_session", side_effect=mock_within_session
+        ), patch.object(
+            wda, "_create_session", return_value=DummySession(posts)
         ):
             asyncio.run(wda.swipe("right"))
             self.assertEqual(posts[0][0], "http://localhost:8100/session/1/actions")
@@ -74,10 +117,14 @@ class TestSwipeGestures(unittest.TestCase):
     def test_wda_swipe_between_points(self):
         wda = WebDriverAgent("localhost", 8100)
         posts = []
+
+        async def mock_within_session(fn):
+            return await fn("http://localhost:8100/session/1")
+
         with patch.object(
-            wda, "within_session", side_effect=lambda fn: fn("http://localhost:8100/session/1")
-        ), patch(
-            "aiohttp.ClientSession", lambda: DummySession(posts)
+            wda, "within_session", side_effect=mock_within_session
+        ), patch.object(
+            wda, "_create_session", return_value=DummySession(posts)
         ):
             asyncio.run(wda.swipe_between_points(1, 2, 3, 4))
             self.assertEqual(posts[0][0], "http://localhost:8100/session/1/actions")

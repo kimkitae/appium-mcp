@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional
 
+from typing import Optional as OptionalType
 from .robot import (
     ActionableError,
     Button,
@@ -79,8 +80,12 @@ AndroidDeviceType = Literal["tv", "mobile"]
 class AndroidRobot(Robot):
     """Android 디바이스 제어 구현"""
 
+    # 기준 density (mdpi = 160dpi)
+    BASE_DENSITY = 160
+
     def __init__(self, device_id: str):
         self.device_id = device_id
+        self._cached_scale: OptionalType[float] = None
 
     def adb(self, *args: str) -> bytes:
         """ADB 명령을 실행합니다."""
@@ -102,16 +107,42 @@ class AndroidRobot(Robot):
 
         return features
 
+    def _get_density(self) -> int:
+        """디바이스의 화면 density(dpi)를 가져옵니다."""
+        try:
+            output = self.adb("shell", "wm", "density").decode("utf-8")
+            # "Physical density: 420" 또는 "Override density: 420" 형식
+            for line in output.strip().split('\n'):
+                if 'density:' in line.lower():
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        return int(parts[-1].strip())
+        except Exception:
+            pass
+        return self.BASE_DENSITY  # 기본값
+
+    def _get_scale(self) -> float:
+        """density 기반 scale 값을 계산합니다."""
+        if self._cached_scale is None:
+            density = self._get_density()
+            # scale = density / 160 (160dpi = 1x, 320dpi = 2x, 480dpi = 3x)
+            self._cached_scale = density / self.BASE_DENSITY
+        return self._cached_scale
+
     async def get_screen_size(self) -> ScreenSize:
-        """화면 크기를 가져옵니다."""
+        """화면 크기를 가져옵니다. 논리적 크기와 scale을 반환합니다."""
         output = self.adb("shell", "wm", "size").decode("utf-8")
 
         # "Physical size: 1080x1920" 형식에서 크기 추출
         parts = output.split()
         if parts:
             screen_size = parts[-1]
-            width, height = map(int, screen_size.split("x"))
-            return ScreenSize(width=width, height=height, scale=1)
+            pixel_width, pixel_height = map(int, screen_size.split("x"))
+            scale = self._get_scale()
+            # 논리적 크기 반환 (픽셀 / scale)
+            logical_width = int(pixel_width / scale)
+            logical_height = int(pixel_height / scale)
+            return ScreenSize(width=logical_width, height=logical_height, scale=scale)
 
         raise ValueError("화면 크기를 가져올 수 없습니다")
 
@@ -162,10 +193,10 @@ class AndroidRobot(Robot):
         return processes
 
     async def swipe(self, direction: SwipeDirection) -> None:
-        """스와이프합니다."""
+        """스와이프합니다. 내부적으로 논리적 좌표를 픽셀로 변환합니다."""
         screen_size = await self.get_screen_size()
+        scale = self._get_scale()
         center_x = screen_size.width // 2
-
         center_y = screen_size.height // 2
 
         if direction == "up":
@@ -187,23 +218,127 @@ class AndroidRobot(Robot):
         else:
             raise ActionableError(f'스와이프 방향 "{direction}"은 지원되지 않습니다')
 
-        self.adb("shell", "input", "swipe", str(x0), str(y0), str(x1), str(y1), "1000")
+        # 논리적 좌표를 픽셀 좌표로 변환
+        px0, py0 = int(x0 * scale), int(y0 * scale)
+        px1, py1 = int(x1 * scale), int(y1 * scale)
+        self.adb("shell", "input", "swipe", str(px0), str(py0), str(px1), str(py1), "1000")
 
     async def swipe_between_points(self, start_x: int, start_y: int, end_x: int, end_y: int) -> None:
-        """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
+        """지정된 좌표에서 다른 좌표까지 스와이프합니다. 좌표는 논리적(dp) 단위."""
+        scale = self._get_scale()
+        px0 = int(start_x * scale)
+        py0 = int(start_y * scale)
+        px1 = int(end_x * scale)
+        py1 = int(end_y * scale)
         self.adb(
             "shell",
             "input",
             "swipe",
-            str(start_x),
-            str(start_y),
-            str(end_x),
-            str(end_y),
+            str(px0),
+            str(py0),
+            str(px1),
+            str(py1),
             "1000",
         )
 
+    async def swipe_from_coordinate(
+        self, x: int, y: int, direction: SwipeDirection, distance: OptionalType[int] = None
+    ) -> None:
+        """지정된 좌표에서 특정 방향으로 스와이프합니다. 좌표는 논리적(dp) 단위."""
+        screen_size = await self.get_screen_size()
+        scale = self._get_scale()
+
+        # 기본 거리: 화면 크기의 30%
+        default_distance_y = int(screen_size.height * 0.3)
+        default_distance_x = int(screen_size.width * 0.3)
+        swipe_distance_y = distance if distance else default_distance_y
+        swipe_distance_x = distance if distance else default_distance_x
+
+        if direction == "up":
+            x0 = x1 = x
+            y0 = y
+            y1 = max(0, y - swipe_distance_y)
+        elif direction == "down":
+            x0 = x1 = x
+            y0 = y
+            y1 = min(screen_size.height, y + swipe_distance_y)
+        elif direction == "left":
+            x0 = x
+            x1 = max(0, x - swipe_distance_x)
+            y0 = y1 = y
+        elif direction == "right":
+            x0 = x
+            x1 = min(screen_size.width, x + swipe_distance_x)
+            y0 = y1 = y
+        else:
+            raise ActionableError(f'스와이프 방향 "{direction}"은 지원되지 않습니다')
+
+        # 논리적 좌표를 픽셀 좌표로 변환
+        px0, py0 = int(x0 * scale), int(y0 * scale)
+        px1, py1 = int(x1 * scale), int(y1 * scale)
+        self.adb("shell", "input", "swipe", str(px0), str(py0), str(px1), str(py1), "1000")
+
+    def _get_display_count(self) -> int:
+        """디스플레이 수를 가져옵니다 (폴더블 디바이스 지원)."""
+        try:
+            output = self.adb("shell", "dumpsys", "SurfaceFlinger", "--display-id")
+            if isinstance(output, bytes):
+                output = output.decode("utf-8")
+            # 각 줄이 하나의 디스플레이 ID
+            lines = [line.strip() for line in output.strip().split('\n') if line.strip()]
+            return len(lines)
+        except Exception:
+            return 1
+
+    def _get_first_display_id(self) -> OptionalType[str]:
+        """첫 번째 활성 디스플레이 ID를 가져옵니다."""
+        # 방법 1: cmd display get-displays (Android 11+)
+        try:
+            output = self.adb("shell", "cmd", "display", "get-displays")
+            if isinstance(output, bytes):
+                output = output.decode("utf-8")
+
+            for line in output.strip().split('\n'):
+                if "state ON" in line:
+                    # 예: "Display id=0, uniqueId=xxx, state ON, ..."
+                    # uniqueId 추출
+                    if "uniqueId=" in line:
+                        parts = line.split("uniqueId=")
+                        if len(parts) > 1:
+                            unique_id = parts[1].split(",")[0].split()[0].strip()
+                            return unique_id
+        except Exception:
+            pass
+
+        # 방법 2: dumpsys display 파싱 (fallback)
+        try:
+            output = self.adb("shell", "dumpsys", "display")
+            if isinstance(output, bytes):
+                output = output.decode("utf-8")
+
+            for line in output.strip().split('\n'):
+                if "DisplayViewport" in line and "isActive=true" in line and "type=INTERNAL" in line:
+                    # uniqueId 추출
+                    if "uniqueId=" in line:
+                        parts = line.split("uniqueId=")
+                        if len(parts) > 1:
+                            unique_id = parts[1].split(",")[0].split()[0].strip()
+                            return unique_id
+        except Exception:
+            pass
+
+        return None
+
     async def get_screenshot(self) -> bytes:
-        """스크린샷을 가져옵니다."""
+        """스크린샷을 가져옵니다. 폴더블 디바이스의 경우 활성 디스플레이를 캡처합니다."""
+        display_count = self._get_display_count()
+
+        if display_count > 1:
+            display_id = self._get_first_display_id()
+            if display_id:
+                return self.adb("exec-out", "screencap", "-p", "-d", display_id)
+
+        # 단일 디스플레이 또는 디스플레이 ID를 가져올 수 없는 경우
         return self.adb("exec-out", "screencap", "-p")
 
     def _collect_elements(self, node: ET.Element) -> List[ScreenElement]:
@@ -301,8 +436,43 @@ class AndroidRobot(Robot):
         self.adb("shell", "input", "keyevent", BUTTON_MAP[button])
 
     async def tap(self, x: int, y: int) -> None:
-        """지정된 좌표를 탭합니다."""
-        self.adb("shell", "input", "tap", str(x), str(y))
+        """지정된 좌표를 탭합니다. 좌표는 논리적(dp) 단위."""
+        scale = self._get_scale()
+        px = int(x * scale)
+        py = int(y * scale)
+        self.adb("shell", "input", "tap", str(px), str(py))
+
+    async def double_tap(self, x: int, y: int) -> None:
+        """지정된 좌표를 더블탭합니다. 좌표는 논리적(dp) 단위."""
+        scale = self._get_scale()
+        px = int(x * scale)
+        py = int(y * scale)
+        # Android는 두 번 빠르게 탭으로 구현
+        self.adb("shell", "input", "tap", str(px), str(py))
+        self.adb("shell", "input", "tap", str(px), str(py))
+
+    async def long_press(self, x: int, y: int, duration: OptionalType[int] = None) -> None:
+        """지정된 좌표를 길게 누릅니다. 좌표는 논리적(dp) 단위."""
+        scale = self._get_scale()
+        px = int(x * scale)
+        py = int(y * scale)
+        # Android에서는 swipe를 같은 좌표로 하면 long press가 됨
+        press_duration = duration if duration else 1000  # 기본 1초
+        self.adb("shell", "input", "swipe", str(px), str(py), str(px), str(py), str(press_duration))
+
+    async def install_app(self, path: str) -> None:
+        """APK 파일을 설치합니다."""
+        try:
+            self.adb("install", "-r", path)
+        except subprocess.CalledProcessError as e:
+            raise ActionableError(f"앱 설치 실패: {e.stderr.decode() if e.stderr else str(e)}")
+
+    async def uninstall_app(self, package_name: str) -> None:
+        """앱을 삭제합니다."""
+        try:
+            self.adb("uninstall", package_name)
+        except subprocess.CalledProcessError as e:
+            raise ActionableError(f"앱 삭제 실패: {e.stderr.decode() if e.stderr else str(e)}")
 
     async def set_orientation(self, orientation: Orientation) -> None:
         """화면 방향을 설정합니다."""
@@ -348,7 +518,7 @@ class AndroidRobot(Robot):
         raise ActionableError("UI Automator XML을 가져올 수 없습니다")
 
     def _get_screen_element_rect(self, node: ET.Element) -> ScreenElementRect:
-        """노드의 화면 위치를 가져옵니다."""
+        """노드의 화면 위치를 가져옵니다. 좌표는 논리적(dp) 단위로 변환됩니다."""
         bounds = node.get("bounds", "")
 
         # "[left,top][right,bottom]" 형식 파싱
@@ -358,7 +528,14 @@ class AndroidRobot(Robot):
 
         if match:
             left, top, right, bottom = map(int, match.groups())
-            return ScreenElementRect(x=left, y=top, width=right - left, height=bottom - top)
+            # 픽셀 좌표를 논리적 좌표로 변환
+            scale = self._get_scale()
+            return ScreenElementRect(
+                x=int(left / scale),
+                y=int(top / scale),
+                width=int((right - left) / scale),
+                height=int((bottom - top) / scale)
+            )
 
         return ScreenElementRect(x=0, y=0, width=0, height=0)
 

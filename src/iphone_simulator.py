@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .webdriver_agent import WebDriverAgent
+from typing import Optional as OptionalType
 from .robot import (
-    ActionableError, Button, InstalledApp, Robot, ScreenElement, 
+    ActionableError, Button, InstalledApp, Robot, ScreenElement,
     ScreenSize, SwipeDirection, Orientation
 )
 
@@ -191,7 +192,21 @@ class Simctl(Robot):
         """스와이프합니다."""
         wda = await self._wda()
         await wda.swipe(direction)
-    
+
+    async def swipe_between_points(
+        self, start_x: int, start_y: int, end_x: int, end_y: int
+    ) -> None:
+        """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
+        wda = await self._wda()
+        await wda.swipe_between_points(start_x, start_y, end_x, end_y)
+
+    async def swipe_from_coordinate(
+        self, x: int, y: int, direction: SwipeDirection, distance: OptionalType[int] = None
+    ) -> None:
+        """지정된 좌표에서 특정 방향으로 스와이프합니다."""
+        wda = await self._wda()
+        await wda.swipe_from_coordinate(x, y, direction, distance)
+
     async def tap(self, x: int, y: int) -> None:
         """지정된 좌표를 탭합니다."""
         wda = await self._wda()
