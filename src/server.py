@@ -99,17 +99,30 @@ def create_mcp_server() -> Server:
 
     server = Server("mobile-mcp")
 
-    # 전역 상태
-    robot: Optional[Robot] = None
+    # 전역 상태 - 멀티 디바이스 지원
+    devices: Dict[str, Robot] = {}  # alias -> Robot 매핑
+    current_alias: Optional[str] = None  # 현재 활성 디바이스 별칭
     simulator_manager = SimctlManager()
 
-    def require_robot() -> None:
-        """로봇이 선택되었는지 확인합니다."""
-        if not robot:
+    def get_robot(alias: Optional[str] = None) -> Robot:
+        """지정된 별칭 또는 현재 활성 디바이스의 로봇을 반환합니다."""
+        target_alias = alias or current_alias
+        if not target_alias:
             raise ActionableError(
                 "선택된 디바이스가 없습니다. "
                 "mobile_use_device 도구를 사용하여 디바이스를 선택하세요."
             )
+        if target_alias not in devices:
+            available = ", ".join(devices.keys()) if devices else "없음"
+            raise ActionableError(
+                f"'{target_alias}' 디바이스를 찾을 수 없습니다. "
+                f"연결된 디바이스: {available}"
+            )
+        return devices[target_alias]
+
+    def require_robot() -> None:
+        """로봇이 선택되었는지 확인합니다. (하위 호환성)"""
+        get_robot()
 
     # 도구 정의
 
@@ -130,10 +143,19 @@ DO NOT write code to interact with devices - use these MCP tools directly instea
             ),
             Tool(
                 name="mobile_use_device",
-                description="""Select a specific device to control. You MUST call this before using any other mobile tools (except mobile_list_available_devices).
-After calling mobile_list_available_devices, use this tool to select which device to interact with.
-Example: To select an Android device with ID 'R3CN70RQZ2A', call with device='R3CN70RQZ2A' and deviceType='android'.
-DO NOT write Python code - call this tool directly.""",
+                description="""Select and connect a device with an optional alias for multi-device scenarios.
+You MUST call this before using any other mobile tools (except mobile_list_available_devices).
+
+MULTI-DEVICE SUPPORT:
+- Use 'alias' parameter to give a short name to the device (e.g., 'phone1', 'phone2', 'tablet')
+- If alias is not provided, device ID is used as alias
+- You can connect multiple devices and switch between them using mobile_switch_device
+
+Example single device: device='R3CN70RQZ2A', deviceType='android'
+Example multi-device:
+  1. device='R3CN70RQZ2A', deviceType='android', alias='phone1'
+  2. device='ABCD1234', deviceType='android', alias='phone2'
+  3. Use mobile_switch_device to switch between phone1 and phone2""",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -143,8 +165,35 @@ DO NOT write Python code - call this tool directly.""",
                             "enum": ["simulator", "ios", "android"],
                             "description": "Device type: 'simulator' for iOS Simulator, 'ios' for physical iPhone/iPad, 'android' for Android devices",
                         },
+                        "alias": {
+                            "type": "string",
+                            "description": "Short alias for the device (e.g., 'phone1', 'tablet'). Optional - device ID used if not specified.",
+                        },
                     },
                     "required": ["device", "deviceType"],
+                },
+            ),
+            Tool(
+                name="mobile_switch_device",
+                description="""Switch to a different connected device by its alias.
+Use this to switch between multiple devices that were connected with mobile_use_device.
+Call mobile_list_connected_devices to see available aliases.""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "alias": {"type": "string", "description": "Device alias to switch to"},
+                    },
+                    "required": ["alias"],
+                },
+            ),
+            Tool(
+                name="mobile_list_connected_devices",
+                description="""List all connected devices with their aliases.
+Shows which device is currently active.
+Use mobile_switch_device to change the active device.""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
                 },
             ),
             Tool(
@@ -465,7 +514,7 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
         name: str, arguments: Dict[str, Any]
     ) -> List[TextContent | ImageContent]:
         """도구 호출을 처리합니다."""
-        nonlocal robot
+        nonlocal current_alias
 
         try:
             trace(f"{name} 호출, 인자: {json.dumps(arguments)}")
@@ -499,53 +548,83 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
             elif name == "mobile_use_device":
                 device = arguments["device"]
                 device_type = arguments["deviceType"]
+                alias = arguments.get("alias", device)  # alias가 없으면 device ID 사용
 
                 if device_type == "simulator":
-                    robot = simulator_manager.get_simulator(device)
+                    new_robot = simulator_manager.get_simulator(device)
                 elif device_type == "ios":
-                    robot = IosRobot(device)
+                    new_robot = IosRobot(device)
                 elif device_type == "android":
-                    robot = AndroidRobot(device)
+                    new_robot = AndroidRobot(device)
+                else:
+                    raise ValueError(f"알 수 없는 디바이스 타입: {device_type}")
 
-                result = f"선택된 디바이스: {device}"
+                devices[alias] = new_robot
+                current_alias = alias
+
+                device_count = len(devices)
+                if device_count > 1:
+                    result = f"디바이스 연결됨: '{alias}' (현재 {device_count}개 디바이스 연결 중)"
+                else:
+                    result = f"선택된 디바이스: {device} (별칭: '{alias}')"
+
+            elif name == "mobile_switch_device":
+                alias = arguments["alias"]
+                if alias not in devices:
+                    available = ", ".join(devices.keys()) if devices else "없음"
+                    raise ActionableError(
+                        f"'{alias}' 디바이스를 찾을 수 없습니다. 연결된 디바이스: {available}"
+                    )
+                current_alias = alias
+                result = f"활성 디바이스가 '{alias}'(으)로 변경됨"
+
+            elif name == "mobile_list_connected_devices":
+                if not devices:
+                    result = "연결된 디바이스가 없습니다. mobile_use_device로 디바이스를 연결하세요."
+                else:
+                    device_list = []
+                    for alias in devices.keys():
+                        is_active = " (활성)" if alias == current_alias else ""
+                        device_list.append(f"  - {alias}{is_active}")
+                    result = f"연결된 디바이스 ({len(devices)}개):\n" + "\n".join(device_list)
 
             elif name == "mobile_list_apps":
-                require_robot()
+                robot = get_robot()
                 apps = await robot.list_apps()
                 app_list = [f"{app.app_name} ({app.package_name})" for app in apps]
                 result = f"디바이스에서 발견된 앱: {', '.join(app_list)}"
 
             elif name == "mobile_launch_app":
-                require_robot()
+                robot = get_robot()
                 package_name = arguments["packageName"]
                 await robot.launch_app(package_name)
                 result = f"앱 실행됨: {package_name}"
 
             elif name == "mobile_terminate_app":
-                require_robot()
+                robot = get_robot()
                 package_name = arguments["packageName"]
                 await robot.terminate_app(package_name)
                 result = f"앱 종료됨: {package_name}"
 
             elif name == "mobile_install_app":
-                require_robot()
+                robot = get_robot()
                 path = arguments["path"]
                 await robot.install_app(path)
                 result = f"앱 설치됨: {path}"
 
             elif name == "mobile_uninstall_app":
-                require_robot()
+                robot = get_robot()
                 package_name = arguments["packageName"]
                 await robot.uninstall_app(package_name)
                 result = f"앱 삭제됨: {package_name}"
 
             elif name == "mobile_get_screen_size":
-                require_robot()
+                robot = get_robot()
                 screen_size = await robot.get_screen_size()
                 result = f"화면 크기: {screen_size.width}x{screen_size.height} 픽셀"
 
             elif name == "mobile_click_on_screen_at_coordinates":
-                require_robot()
+                robot = get_robot()
                 x = arguments["x"]
                 y = arguments["y"]
 
@@ -557,7 +636,7 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 result = f"좌표 {tx}, {ty}에서 화면 클릭됨"
 
             elif name == "mobile_double_tap_on_screen":
-                require_robot()
+                robot = get_robot()
                 x = arguments["x"]
                 y = arguments["y"]
                 tx = int(x)
@@ -566,7 +645,7 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 result = f"좌표 {tx}, {ty}에서 더블탭됨"
 
             elif name == "mobile_long_press_on_screen_at_coordinates":
-                require_robot()
+                robot = get_robot()
                 x = arguments["x"]
                 y = arguments["y"]
                 duration = arguments.get("duration")
@@ -577,7 +656,7 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 result = f"좌표 {tx}, {ty}에서 길게 누름{duration_text}"
 
             elif name == "mobile_list_elements_on_screen":
-                require_robot()
+                robot = get_robot()
                 elements = await robot.get_elements_on_screen()
 
                 # 컴팩트 포맷으로 변환 (빈 요소 제외, 짧은 키 사용)
@@ -591,19 +670,19 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 result = f"Elements ({len(element_list)}): {json.dumps(element_list, ensure_ascii=False, separators=(',', ':'))}"
 
             elif name == "mobile_press_button":
-                require_robot()
+                robot = get_robot()
                 button = arguments["button"]
                 await robot.press_button(button)
                 result = f"버튼 눌림: {button}"
 
             elif name == "mobile_open_url":
-                require_robot()
+                robot = get_robot()
                 url = arguments["url"]
                 await robot.open_url(url)
                 result = f"URL 열림: {url}"
 
             elif name == "mobile_swipe_on_screen":
-                require_robot()
+                robot = get_robot()
                 direction = arguments.get("direction")
                 x = arguments.get("x")
                 y = arguments.get("y")
@@ -622,7 +701,7 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                     result = f"화면에서 {direction} 방향으로 스와이프됨"
 
             elif name == "mobile_type_keys":
-                require_robot()
+                robot = get_robot()
                 text = arguments["text"]
                 submit = arguments["submit"]
                 await robot.send_keys(text)
@@ -633,7 +712,7 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 result = f"텍스트 입력됨: {text}"
 
             elif name == "mobile_hide_keyboard":
-                require_robot()
+                robot = get_robot()
                 hidden = await robot.hide_keyboard()
                 if hidden:
                     result = "키보드가 숨겨졌습니다"
@@ -641,12 +720,12 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                     result = "키보드가 이미 숨겨져 있거나 표시되지 않았습니다"
 
             elif name == "mobile_clear_text_field":
-                require_robot()
+                robot = get_robot()
                 await robot.clear_text_field()
                 result = "텍스트 필드가 초기화되었습니다"
 
             elif name == "mobile_take_screenshot":
-                require_robot()
+                robot = get_robot()
                 screen_size = await robot.get_screen_size()
                 screenshot = await robot.get_screenshot()
                 mime_type = "image/png"
@@ -680,7 +759,7 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 return [ImageContent(type="image", data=screenshot_b64, mimeType=mime_type)]
 
             elif name == "mobile_save_screenshot":
-                require_robot()
+                robot = get_robot()
                 path = arguments["path"]
                 screenshot = await robot.get_screenshot()
 
@@ -702,7 +781,7 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 result = f"스크린샷 저장됨: {path} ({len(screenshot)} 바이트)"
 
             elif name == "mobile_get_ui_state":
-                require_robot()
+                robot = get_robot()
                 # 병렬로 정보 수집
                 screen_size_task = asyncio.create_task(robot.get_screen_size())
                 screenshot_task = asyncio.create_task(robot.get_screenshot())
@@ -752,13 +831,13 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 ]
 
             elif name == "mobile_set_orientation":
-                require_robot()
+                robot = get_robot()
                 orientation = arguments["orientation"]
                 await robot.set_orientation(orientation)
                 result = f"디바이스 방향이 {orientation}으로 변경됨"
 
             elif name == "mobile_get_orientation":
-                require_robot()
+                robot = get_robot()
                 orientation = await robot.get_orientation()
                 result = f"현재 디바이스 방향: {orientation}"
 
