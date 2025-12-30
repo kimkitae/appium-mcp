@@ -518,3 +518,18 @@ class WebDriverAgent:
                     return data["value"].lower()
 
         return await self.within_session(_get)
+
+    async def hide_keyboard(self) -> bool:
+        """키보드를 숨깁니다."""
+
+        async def _hide(session_url: str) -> bool:
+            url = f"{session_url}/wda/keyboard/dismiss"
+            async with self._create_session() as session:
+                try:
+                    resp = await session.post(url)
+                    return resp.ok
+                except Exception:
+                    # 키보드가 없거나 이미 숨겨진 경우
+                    return False
+
+        return await self.within_session(_hide)

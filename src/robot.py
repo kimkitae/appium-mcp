@@ -136,4 +136,8 @@ class Robot(Protocol):
     
     async def get_orientation(self) -> Orientation:
         """현재 화면 방향을 가져옵니다."""
-        ... 
+        ...
+
+    async def hide_keyboard(self) -> bool:
+        """키보드를 숨깁니다. 키보드가 숨겨졌으면 True, 이미 숨겨져 있었으면 False 반환."""
+        ...

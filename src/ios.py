@@ -278,6 +278,11 @@ class IosRobot(Robot):
         wda = await self._wda()
         return await wda.get_orientation()
 
+    async def hide_keyboard(self) -> bool:
+        """키보드를 숨깁니다."""
+        wda = await self._wda()
+        return await wda.hide_keyboard()
+
 
 class IosManager:
     """iOS 디바이스 관리자"""

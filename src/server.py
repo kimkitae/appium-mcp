@@ -336,7 +336,10 @@ Use this to scroll through lists, pages, or navigate carousels.""",
                 description="""Type text into the currently focused input field.
 First tap on an input field using mobile_click_on_screen_at_coordinates, then use this to type.
 Set submit=true to press Enter after typing (useful for search fields or login forms).
-Example: Type email, then type password, then tap login button.""",
+
+IMPORTANT: After typing, the keyboard often covers buttons below!
+Call mobile_hide_keyboard BEFORE tapping any button that might be hidden by the keyboard.
+Example flow: tap email field → type email → tap password field → type password → HIDE KEYBOARD → tap login button.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -344,6 +347,24 @@ Example: Type email, then type password, then tap login button.""",
                         "submit": {"type": "boolean", "description": "Press Enter/Submit after typing (true/false)"},
                     },
                     "required": ["text", "submit"],
+                },
+            ),
+            Tool(
+                name="mobile_hide_keyboard",
+                description="""Dismiss/hide the on-screen keyboard.
+CRITICAL: Call this after typing text and BEFORE tapping buttons that may be hidden by the keyboard!
+This prevents accidentally tapping keyboard keys instead of the intended button (e.g., Login button).
+
+Common pattern:
+1. Tap input field → type text
+2. Tap another input field → type text
+3. **mobile_hide_keyboard** ← CALL THIS
+4. Tap submit/login button
+
+Returns: true if keyboard was hidden, false if already hidden.""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
                 },
             ),
             Tool(
@@ -591,6 +612,14 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                     await robot.press_button("ENTER")
 
                 result = f"텍스트 입력됨: {text}"
+
+            elif name == "mobile_hide_keyboard":
+                require_robot()
+                hidden = await robot.hide_keyboard()
+                if hidden:
+                    result = "키보드가 숨겨졌습니다"
+                else:
+                    result = "키보드가 이미 숨겨져 있거나 표시되지 않았습니다"
 
             elif name == "mobile_take_screenshot":
                 require_robot()

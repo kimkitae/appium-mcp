@@ -591,6 +591,15 @@ class AndroidRobot(Robot):
         )
         return "portrait" if rotation == "0" else "landscape"
 
+    async def hide_keyboard(self) -> bool:
+        """키보드를 숨깁니다. BACK 버튼으로 키보드를 닫습니다."""
+        # 키보드가 표시되어 있는지 확인
+        dumpsys = self.adb("shell", "dumpsys", "input_method").decode("utf-8")
+        if "mInputShown=true" in dumpsys:
+            self.adb("shell", "input", "keyevent", "KEYCODE_BACK")
+            return True
+        return False
+
     async def _get_ui_automator_dump(self) -> str:
         """UI Automator 덤프를 가져옵니다."""
         for _ in range(10):
