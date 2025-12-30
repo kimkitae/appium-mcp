@@ -8,7 +8,34 @@ from functools import lru_cache
 from .logger import trace
 
 
-DEFAULT_JPEG_QUALITY = 75
+# Claude는 이미지를 512x512 타일로 분할하여 토큰 계산
+# 타일당 약 768 토큰 사용
+# 최대 너비를 제한하여 타일 수 감소 -> 토큰 절약
+CLAUDE_TILE_SIZE = 512
+
+# 기본 JPEG 품질 (60%: 분석에 충분하면서 파일 크기 최소화)
+DEFAULT_JPEG_QUALITY = 60
+
+# 최대 이미지 너비 (환경변수로 조정 가능)
+# 480px: 512 타일 1개에 맞춤, 일반 앱 UI 분석에 충분
+# 설정: MOBILE_MCP_MAX_IMAGE_WIDTH=600 등
+DEFAULT_MAX_IMAGE_WIDTH = 480
+
+
+def get_max_image_width() -> int:
+    """최대 이미지 너비를 반환합니다."""
+    try:
+        return int(os.environ.get("MOBILE_MCP_MAX_IMAGE_WIDTH", DEFAULT_MAX_IMAGE_WIDTH))
+    except ValueError:
+        return DEFAULT_MAX_IMAGE_WIDTH
+
+
+def get_jpeg_quality() -> int:
+    """JPEG 품질을 반환합니다."""
+    try:
+        return int(os.environ.get("MOBILE_MCP_JPEG_QUALITY", DEFAULT_JPEG_QUALITY))
+    except ValueError:
+        return DEFAULT_JPEG_QUALITY
 
 
 class ImageTransformer:

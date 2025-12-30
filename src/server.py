@@ -16,7 +16,52 @@ from .iphone_simulator import SimctlManager
 from .logger import error, trace
 from .png import PNG
 from .robot import ActionableError, Robot
-from .image_utils import Image, is_scaling_available
+from .image_utils import Image, is_scaling_available, get_max_image_width, get_jpeg_quality
+from .robot import ScreenElement
+
+
+def _format_element_compact(element: ScreenElement) -> Optional[Dict[str, Any]]:
+    """요소를 컴팩트한 형식으로 변환합니다.
+
+    토큰 사용량을 줄이기 위해:
+    - 텍스트/라벨/identifier가 없는 요소는 제외
+    - 빈 필드 제외
+    - 좌표를 간단한 배열로 표현 [x, y, w, h]
+    """
+    # 유용한 정보가 있는 요소만 포함
+    has_text = element.text and element.text.strip()
+    has_label = element.label and element.label.strip()
+    has_name = element.name and element.name.strip()
+    has_identifier = element.identifier and element.identifier.strip()
+
+    if not (has_text or has_label or has_name or has_identifier):
+        return None
+
+    # 컴팩트 딕셔너리 생성 - 빈 필드 제외
+    elem = {"type": element.type}
+
+    if has_text:
+        elem["text"] = element.text.strip()
+    if has_label and element.label.strip() != elem.get("text", ""):
+        elem["label"] = element.label.strip()
+    if has_name and element.name.strip() not in (elem.get("text", ""), elem.get("label", "")):
+        elem["name"] = element.name.strip()
+    if has_identifier:
+        elem["id"] = element.identifier.strip()
+    if element.value:
+        elem["value"] = element.value
+    if element.focused:
+        elem["focused"] = True
+
+    # 좌표를 배열로 [x, y, w, h] - 더 컴팩트
+    elem["rect"] = [
+        element.rect.x,
+        element.rect.y,
+        element.rect.width,
+        element.rect.height
+    ]
+
+    return elem
 
 
 def get_agent_version() -> str:
@@ -473,28 +518,15 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 require_robot()
                 elements = await robot.get_elements_on_screen()
 
-                # 좌표는 포인트(논리적) 단위로 반환 - 리사이즈된 스크린샷과 동일한 좌표계
+                # 컴팩트 포맷으로 변환 (빈 요소 제외, 짧은 키 사용)
+                # 좌표는 포인트(논리적) 단위 - rect: [x, y, width, height]
                 element_list = []
                 for element in elements:
-                    elem_dict = {
-                        "type": element.type,
-                        "text": element.text,
-                        "label": element.label,
-                        "name": element.name,
-                        "value": element.value,
-                        "identifier": element.identifier,
-                        "coordinates": {
-                            "x": element.rect.x,
-                            "y": element.rect.y,
-                            "width": element.rect.width,
-                            "height": element.rect.height,
-                        },
-                    }
-                    if element.focused:
-                        elem_dict["focused"] = True
-                    element_list.append(elem_dict)
+                    elem = _format_element_compact(element)
+                    if elem:
+                        element_list.append(elem)
 
-                result = f"화면에서 발견된 요소: {json.dumps(element_list)}"
+                result = f"Elements ({len(element_list)}): {json.dumps(element_list, ensure_ascii=False, separators=(',', ':'))}"
 
             elif name == "mobile_press_button":
                 require_robot()
@@ -550,16 +582,21 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 if png_size.width <= 0 or png_size.height <= 0:
                     raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
 
-                # 이미지 스케일링이 가능하면 크기를 줄여서 토큰 비용 절감
-                if is_scaling_available() and screen_size.scale > 1:
-                    trace("이미지 스케일링 가능, 스크린샷 리사이즈 중")
+                # 이미지 최적화 (토큰 비용 절감)
+                if is_scaling_available():
                     before_size = len(screenshot)
-                    # 원본 해상도 / scale = 논리적 해상도로 변환
-                    target_width = int(png_size.width / screen_size.scale)
+                    # 논리적 해상도 계산
+                    logical_width = int(png_size.width / screen_size.scale) if screen_size.scale > 1 else png_size.width
+                    # 최대 너비 제한 적용 (Claude 타일 최적화)
+                    max_width = get_max_image_width()
+                    target_width = min(logical_width, max_width)
+                    quality = get_jpeg_quality()
+
+                    trace(f"이미지 최적화: {png_size.width}x{png_size.height} -> {target_width}px, quality={quality}")
                     img = Image.from_buffer(screenshot)
-                    screenshot = img.resize(target_width).jpeg({"quality": 75}).to_buffer()
+                    screenshot = img.resize(target_width).jpeg({"quality": quality}).to_buffer()
                     after_size = len(screenshot)
-                    trace(f"스크린샷 리사이즈: {before_size} -> {after_size} 바이트")
+                    trace(f"스크린샷 리사이즈: {before_size} -> {after_size} 바이트 ({100*after_size//before_size}%)")
                     mime_type = "image/jpeg"
 
                 screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
@@ -606,42 +643,33 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 if png_size.width <= 0 or png_size.height <= 0:
                     raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
 
-                # 이미지 스케일링 적용
-                if is_scaling_available() and screen_size.scale > 1:
-                    trace("이미지 스케일링 가능, 스크린샷 리사이즈 중")
+                # 이미지 최적화 (토큰 비용 절감)
+                if is_scaling_available():
                     before_size = len(screenshot)
-                    target_width = int(png_size.width / screen_size.scale)
+                    logical_width = int(png_size.width / screen_size.scale) if screen_size.scale > 1 else png_size.width
+                    max_width = get_max_image_width()
+                    target_width = min(logical_width, max_width)
+                    quality = get_jpeg_quality()
+
+                    trace(f"이미지 최적화: {png_size.width}x{png_size.height} -> {target_width}px, quality={quality}")
                     img = Image.from_buffer(screenshot)
-                    screenshot = img.resize(target_width).jpeg({"quality": 75}).to_buffer()
+                    screenshot = img.resize(target_width).jpeg({"quality": quality}).to_buffer()
                     after_size = len(screenshot)
-                    trace(f"스크린샷 리사이즈: {before_size} -> {after_size} 바이트")
+                    trace(f"스크린샷 리사이즈: {before_size} -> {after_size} 바이트 ({100*after_size//before_size}%)")
                     mime_type = "image/jpeg"
 
                 screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
                 trace(f"스크린샷 촬영됨: {len(screenshot)} 바이트")
 
-                # 요소 좌표는 포인트(논리적) 단위로 반환 - 리사이즈된 이미지와 동일한 좌표계
+                # 컴팩트 포맷으로 변환 (빈 요소 제외)
+                # 좌표는 포인트(논리적) 단위 - rect: [x, y, width, height]
                 element_list = []
                 for element in elements:
-                    elem_dict = {
-                        "type": element.type,
-                        "text": element.text,
-                        "label": element.label,
-                        "name": element.name,
-                        "value": element.value,
-                        "identifier": element.identifier,
-                        "coordinates": {
-                            "x": element.rect.x,
-                            "y": element.rect.y,
-                            "width": element.rect.width,
-                            "height": element.rect.height,
-                        },
-                    }
-                    if element.focused:
-                        elem_dict["focused"] = True
-                    element_list.append(elem_dict)
+                    elem = _format_element_compact(element)
+                    if elem:
+                        element_list.append(elem)
 
-                result = f"화면에서 발견된 요소: {json.dumps(element_list)}"
+                result = f"Elements ({len(element_list)}): {json.dumps(element_list, ensure_ascii=False, separators=(',', ':'))}"
 
                 return [
                     TextContent(type="text", text=result),
