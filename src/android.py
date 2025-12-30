@@ -1,3 +1,4 @@
+import asyncio
 import os
 import subprocess
 import xml.etree.ElementTree as ET
@@ -16,6 +17,7 @@ from .robot import (
     ScreenSize,
     SwipeDirection,
 )
+from .uiautomator2_server import UiAutomator2Server, DEFAULT_HOST_PORT
 
 
 @dataclass
@@ -78,14 +80,77 @@ AndroidDeviceType = Literal["tv", "mobile"]
 
 
 class AndroidRobot(Robot):
-    """Android 디바이스 제어 구현"""
+    """Android 디바이스 제어 구현
+
+    두 가지 모드를 지원합니다:
+    1. ADB 모드 (기본): adb 명령어를 직접 사용
+    2. Appium 모드: UiAutomator2 서버와 HTTP 통신 (더 빠르고 안정적)
+
+    Appium 모드를 사용하려면:
+    - UiAutomator2 서버 APK가 설치되어 있어야 함
+    - use_appium=True로 초기화하거나 MOBILE_MCP_USE_APPIUM=1 환경변수 설정
+    """
 
     # 기준 density (mdpi = 160dpi)
     BASE_DENSITY = 160
 
-    def __init__(self, device_id: str):
+    def __init__(
+        self,
+        device_id: str,
+        use_appium: OptionalType[bool] = None,
+        appium_port: int = DEFAULT_HOST_PORT,
+    ):
         self.device_id = device_id
         self._cached_scale: OptionalType[float] = None
+        self._appium_port = appium_port
+
+        # Appium 모드 결정
+        if use_appium is None:
+            use_appium = os.environ.get("MOBILE_MCP_USE_APPIUM", "").lower() in ("1", "true", "yes")
+        self._use_appium = use_appium
+
+        # UiAutomator2 서버 클라이언트 (지연 초기화)
+        self._ua2_server: OptionalType[UiAutomator2Server] = None
+        self._ua2_server_checked = False
+        self._ua2_server_available = False
+
+    async def _get_ua2_server(self) -> OptionalType[UiAutomator2Server]:
+        """UiAutomator2 서버 클라이언트를 반환합니다. 사용 불가능하면 None을 반환합니다."""
+        if not self._use_appium:
+            return None
+
+        if self._ua2_server_checked:
+            return self._ua2_server if self._ua2_server_available else None
+
+        self._ua2_server_checked = True
+
+        # 서버 클라이언트 생성
+        self._ua2_server = UiAutomator2Server(
+            device_id=self.device_id,
+            host_port=self._appium_port,
+        )
+
+        # 서버가 이미 실행 중인지 확인
+        if await self._ua2_server.is_running():
+            self._ua2_server_available = True
+            return self._ua2_server
+
+        # 서버 APK가 설치되어 있는지 확인
+        if not self._ua2_server.is_server_installed():
+            self._ua2_server_available = False
+            return None
+
+        # 서버 시작 시도
+        try:
+            self._ua2_server.start_server()
+            if await self._ua2_server.wait_for_server(timeout=10):
+                self._ua2_server_available = True
+                return self._ua2_server
+        except Exception:
+            pass
+
+        self._ua2_server_available = False
+        return None
 
     def adb(self, *args: str) -> bytes:
         """ADB 명령을 실행합니다."""
@@ -330,7 +395,21 @@ class AndroidRobot(Robot):
         return None
 
     async def get_screenshot(self) -> bytes:
-        """스크린샷을 가져옵니다. 폴더블 디바이스의 경우 활성 디스플레이를 캡처합니다."""
+        """스크린샷을 가져옵니다.
+
+        UiAutomator2 서버가 사용 가능하면 서버를 통해 가져옵니다.
+        폴더블 디바이스의 경우 활성 디스플레이를 캡처합니다.
+        """
+        # UiAutomator2 서버 시도 (Appium 모드)
+        ua2_server = await self._get_ua2_server()
+        if ua2_server:
+            try:
+                return await ua2_server.get_screenshot()
+            except Exception:
+                # 서버 실패 시 adb 폴백
+                pass
+
+        # adb screencap 폴백
         display_count = self._get_display_count()
 
         if display_count > 1:
@@ -377,7 +456,21 @@ class AndroidRobot(Robot):
         return elements
 
     async def get_elements_on_screen(self) -> List[ScreenElement]:
-        """화면의 모든 요소를 가져옵니다."""
+        """화면의 모든 요소를 가져옵니다.
+
+        UiAutomator2 서버가 사용 가능하면 서버를 통해 가져옵니다 (더 빠름).
+        그렇지 않으면 adb uiautomator dump를 사용합니다.
+        """
+        # UiAutomator2 서버 시도 (Appium 모드)
+        ua2_server = await self._get_ua2_server()
+        if ua2_server:
+            try:
+                return await ua2_server.get_elements_on_screen()
+            except Exception:
+                # 서버 실패 시 adb 폴백
+                pass
+
+        # adb uiautomator dump 폴백
         xml_str = await self._get_ui_automator_dump()
         root = ET.fromstring(xml_str)
 
