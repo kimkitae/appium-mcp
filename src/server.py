@@ -265,12 +265,20 @@ Useful for triggering context menus or drag operations.""",
             ),
             Tool(
                 name="mobile_list_elements_on_screen",
-                description="""Get all interactive UI elements currently visible on screen.
-Returns element type, text, label, and coordinates for each element.
-Use the coordinates with mobile_click_on_screen_at_coordinates to tap elements.
-IMPORTANT: Always call this to find elements - do not guess coordinates.
-The result includes x, y, width, height for each element's bounding box.
-To tap an element's center, use: x + width/2, y + height/2.""",
+                description="""Get all UI elements on screen - FAST and LOW COST (no image).
+PREFER THIS over mobile_get_ui_state when you just need to find elements to tap/click.
+Returns: element type, text, label, identifier, and rect [x, y, width, height].
+
+When to use this tool:
+- Finding a button/element to tap (most common case)
+- Checking if a specific element exists
+- After an action, to verify the screen changed
+
+When to use mobile_get_ui_state instead:
+- You need to visually verify complex UI (charts, images, colors)
+- The element list alone is not enough to understand the screen
+
+Cost: ~500 tokens vs ~2,000 tokens for get_ui_state with screenshot.""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
@@ -340,10 +348,14 @@ Example: Type email, then type password, then tap login button.""",
             ),
             Tool(
                 name="mobile_take_screenshot",
-                description="""Capture a screenshot of the current screen.
-Returns the image directly - useful for visual verification.
-The screenshot is automatically resized to reduce token usage.
-Use this to see what's currently on screen before taking actions.""",
+                description="""Capture screenshot ONLY - no element list. Cost: ~1,500 tokens.
+Use mobile_list_elements_on_screen instead if you need element coordinates.
+Use mobile_get_ui_state if you need BOTH screenshot AND elements.
+
+When to use this tool:
+- Saving screenshot for documentation/report
+- Pure visual verification (no interaction needed)
+- User specifically asked to "show" or "see" the screen""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
@@ -363,10 +375,20 @@ Supports .png and .jpg formats based on file extension.""",
             ),
             Tool(
                 name="mobile_get_ui_state",
-                description="""Get both screenshot AND UI elements in one call (most efficient).
-Returns a screenshot image plus a list of all interactive elements with their coordinates.
-Use this as your primary tool to understand what's on screen and find elements to interact with.
-This is more efficient than calling mobile_take_screenshot and mobile_list_elements_on_screen separately.""",
+                description="""Get screenshot AND UI elements together - use only when VISUAL VERIFICATION needed.
+Returns both an image and element list. Higher cost (~2,000 tokens) due to image.
+
+When to use this tool:
+- First time seeing a new screen (need to understand layout)
+- Verifying visual elements (images, charts, colors, animations)
+- Element list alone is confusing or insufficient
+
+PREFER mobile_list_elements_on_screen (~500 tokens) when:
+- You just need to find a button/element to tap
+- Checking if navigation succeeded (element exists = success)
+- After simple actions like tap, type, swipe
+
+This is more efficient than calling take_screenshot + list_elements separately.""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
