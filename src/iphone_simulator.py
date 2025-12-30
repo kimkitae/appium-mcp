@@ -237,6 +237,11 @@ class Simctl(Robot):
         wda = await self._wda()
         return await wda.hide_keyboard()
 
+    async def clear_text_field(self) -> None:
+        """현재 포커스된 텍스트 필드의 내용을 모두 삭제합니다."""
+        wda = await self._wda()
+        await wda.clear_text_field()
+
 
 class SimctlManager:
     """시뮬레이터 관리자"""

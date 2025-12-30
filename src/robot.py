@@ -141,3 +141,7 @@ class Robot(Protocol):
     async def hide_keyboard(self) -> bool:
         """키보드를 숨깁니다. 키보드가 숨겨졌으면 True, 이미 숨겨져 있었으면 False 반환."""
         ...
+
+    async def clear_text_field(self) -> None:
+        """현재 포커스된 텍스트 필드의 내용을 모두 삭제합니다."""
+        ...

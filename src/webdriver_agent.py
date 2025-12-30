@@ -533,3 +533,24 @@ class WebDriverAgent:
                     return False
 
         return await self.within_session(_hide)
+
+    async def clear_text_field(self) -> None:
+        """현재 포커스된 텍스트 필드의 내용을 모두 삭제합니다."""
+
+        async def _clear(session_url: str) -> None:
+            async with self._create_session() as session:
+                # 1. 현재 활성화된 요소 가져오기
+                active_url = f"{session_url}/element/active"
+                async with session.get(active_url) as response:
+                    if not response.ok:
+                        return
+                    data = await response.json()
+                    element_id = data.get("value", {}).get("ELEMENT")
+                    if not element_id:
+                        return
+
+                # 2. 요소의 값 지우기
+                clear_url = f"{session_url}/element/{element_id}/clear"
+                await session.post(clear_url)
+
+        await self.within_session(_clear)

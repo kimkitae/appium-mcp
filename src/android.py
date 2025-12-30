@@ -600,6 +600,18 @@ class AndroidRobot(Robot):
             return True
         return False
 
+    async def clear_text_field(self) -> None:
+        """현재 포커스된 텍스트 필드의 내용을 모두 삭제합니다."""
+        # Ctrl+A (전체 선택) 후 Delete
+        # KEYCODE_CTRL_LEFT = 113, KEYCODE_A = 29, KEYCODE_DEL = 67
+        # 또는 KEYCODE_MOVE_END로 끝으로 이동 후 KEYCODE_MOVE_HOME + shift로 전체 선택
+
+        # 방법 1: 끝으로 이동 → Shift+Home으로 전체 선택 → 삭제
+        self.adb("shell", "input", "keyevent", "KEYCODE_MOVE_END")
+        # Shift+Home (KEYCODE_SHIFT_LEFT=59, KEYCODE_MOVE_HOME=122)
+        self.adb("shell", "input", "keyevent", "--longpress", "59", "122")
+        self.adb("shell", "input", "keyevent", "KEYCODE_DEL")
+
     async def _get_ui_automator_dump(self) -> str:
         """UI Automator 덤프를 가져옵니다."""
         for _ in range(10):

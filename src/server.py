@@ -368,6 +368,25 @@ Returns: true if keyboard was hidden, false if already hidden.""",
                 },
             ),
             Tool(
+                name="mobile_clear_text_field",
+                description="""Clear all text in the currently focused text field.
+Use this BEFORE typing new text when the field may already contain text.
+
+Common pattern:
+1. Tap input field
+2. **mobile_clear_text_field** ← CLEAR existing text
+3. Type new text
+
+This is essential for:
+- Re-entering credentials after login failure
+- Editing existing values
+- Ensuring clean input without leftover characters""",
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                },
+            ),
+            Tool(
                 name="mobile_take_screenshot",
                 description="""Capture screenshot ONLY - no element list. Cost: ~1,500 tokens.
 Use mobile_list_elements_on_screen instead if you need element coordinates.
@@ -620,6 +639,11 @@ Use 'portrait' for vertical or 'landscape' for horizontal.""",
                     result = "키보드가 숨겨졌습니다"
                 else:
                     result = "키보드가 이미 숨겨져 있거나 표시되지 않았습니다"
+
+            elif name == "mobile_clear_text_field":
+                require_robot()
+                await robot.clear_text_field()
+                result = "텍스트 필드가 초기화되었습니다"
 
             elif name == "mobile_take_screenshot":
                 require_robot()
