@@ -74,7 +74,10 @@ def create_mcp_server() -> Server:
         return [
             Tool(
                 name="mobile_list_available_devices",
-                description="사용 가능한 모든 디바이스를 나열합니다. 물리적 디바이스와 시뮬레이터를 모두 포함합니다.",
+                description="""List all available mobile devices connected to this computer.
+Returns iOS simulators, physical iOS devices, and Android devices.
+ALWAYS call this tool first before any other mobile operations to discover available devices.
+DO NOT write code to interact with devices - use these MCP tools directly instead.""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
@@ -82,15 +85,18 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_use_device",
-                description="사용할 디바이스를 선택합니다. 시뮬레이터 또는 Android 디바이스일 수 있습니다.",
+                description="""Select a specific device to control. You MUST call this before using any other mobile tools (except mobile_list_available_devices).
+After calling mobile_list_available_devices, use this tool to select which device to interact with.
+Example: To select an Android device with ID 'R3CN70RQZ2A', call with device='R3CN70RQZ2A' and deviceType='android'.
+DO NOT write Python code - call this tool directly.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "device": {"type": "string", "description": "선택할 디바이스의 이름"},
+                        "device": {"type": "string", "description": "Device ID or name from mobile_list_available_devices"},
                         "deviceType": {
                             "type": "string",
                             "enum": ["simulator", "ios", "android"],
-                            "description": "선택할 디바이스의 유형",
+                            "description": "Device type: 'simulator' for iOS Simulator, 'ios' for physical iPhone/iPad, 'android' for Android devices",
                         },
                     },
                     "required": ["device", "deviceType"],
@@ -98,7 +104,10 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_list_apps",
-                description="디바이스에 설치된 모든 앱을 나열합니다.",
+                description="""List all installed apps on the selected device.
+Returns app names and package identifiers (bundle ID for iOS, package name for Android).
+Use this to find the correct packageName before launching or terminating an app.
+Call this tool directly - do not write code.""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
@@ -106,51 +115,61 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_launch_app",
-                description="모바일 디바이스에서 앱을 실행합니다.",
+                description="""Launch/open an app on the device.
+Use the packageName from mobile_list_apps.
+Example Android: packageName='com.android.settings' to open Settings.
+Example iOS: packageName='com.apple.Preferences' to open Settings.
+This tool directly launches the app - no code needed.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "packageName": {"type": "string", "description": "실행할 앱의 패키지 이름"}
+                        "packageName": {"type": "string", "description": "App package name (Android) or bundle ID (iOS)"}
                     },
                     "required": ["packageName"],
                 },
             ),
             Tool(
                 name="mobile_terminate_app",
-                description="모바일 디바이스에서 앱을 중지하고 종료합니다.",
+                description="""Force stop and close an app on the device.
+Use this to completely quit an app before relaunching it for a fresh start.
+Example: terminate 'com.example.app' then launch it again for clean state.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "packageName": {"type": "string", "description": "종료할 앱의 패키지 이름"}
+                        "packageName": {"type": "string", "description": "App package name to terminate"}
                     },
                     "required": ["packageName"],
                 },
             ),
             Tool(
                 name="mobile_install_app",
-                description="APK(Android) 또는 IPA(iOS) 파일을 디바이스에 설치합니다.",
+                description="""Install an APK (Android) or IPA (iOS) file to the device.
+Provide the full local file path to the app package.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "설치할 APK/IPA 파일 경로"}
+                        "path": {"type": "string", "description": "Local file path to APK or IPA file"}
                     },
                     "required": ["path"],
                 },
             ),
             Tool(
                 name="mobile_uninstall_app",
-                description="디바이스에서 앱을 삭제합니다.",
+                description="""Uninstall/remove an app from the device.
+Use the packageName from mobile_list_apps.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "packageName": {"type": "string", "description": "삭제할 앱의 패키지 이름 (Android) 또는 Bundle ID (iOS)"}
+                        "packageName": {"type": "string", "description": "App package name (Android) or Bundle ID (iOS) to uninstall"}
                     },
                     "required": ["packageName"],
                 },
             ),
             Tool(
                 name="mobile_get_screen_size",
-                description="모바일 디바이스의 화면 크기를 픽셀 단위로 가져옵니다.",
+                description="""Get the screen dimensions of the device in logical pixels.
+Returns width, height, and scale factor.
+Coordinates from mobile_list_elements_on_screen use this same coordinate system.""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
@@ -158,44 +177,55 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_click_on_screen_at_coordinates",
-                description="주어진 x,y 좌표에서 화면을 클릭합니다.",
+                description="""Tap/click on a specific point on the screen.
+Use coordinates from mobile_list_elements_on_screen or mobile_get_ui_state.
+The coordinates use logical pixels (same as the resized screenshot).
+Example: To tap a button at position (192, 450), call with x=192, y=450.
+Call this tool directly - do not write code to tap.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "x": {"type": "number", "description": "화면에서 클릭할 x 좌표 (픽셀)"},
-                        "y": {"type": "number", "description": "화면에서 클릭할 y 좌표 (픽셀)"},
+                        "x": {"type": "number", "description": "X coordinate (horizontal position from left)"},
+                        "y": {"type": "number", "description": "Y coordinate (vertical position from top)"},
                     },
                     "required": ["x", "y"],
                 },
             ),
             Tool(
                 name="mobile_double_tap_on_screen",
-                description="주어진 x,y 좌표에서 화면을 더블탭합니다.",
+                description="""Double-tap on a specific point on the screen.
+Useful for zooming in on maps/images or quick selection actions.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "x": {"type": "number", "description": "화면에서 더블탭할 x 좌표"},
-                        "y": {"type": "number", "description": "화면에서 더블탭할 y 좌표"},
+                        "x": {"type": "number", "description": "X coordinate to double-tap"},
+                        "y": {"type": "number", "description": "Y coordinate to double-tap"},
                     },
                     "required": ["x", "y"],
                 },
             ),
             Tool(
                 name="mobile_long_press_on_screen_at_coordinates",
-                description="주어진 x,y 좌표에서 화면을 길게 누릅니다.",
+                description="""Long press (touch and hold) on a specific point.
+Useful for triggering context menus or drag operations.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "x": {"type": "number", "description": "화면에서 길게 누를 x 좌표"},
-                        "y": {"type": "number", "description": "화면에서 길게 누를 y 좌표"},
-                        "duration": {"type": "number", "description": "길게 누르는 시간 (밀리초). 기본값: Android 1000ms, iOS 500ms"},
+                        "x": {"type": "number", "description": "X coordinate to long press"},
+                        "y": {"type": "number", "description": "Y coordinate to long press"},
+                        "duration": {"type": "number", "description": "Hold duration in milliseconds (default: 1000ms for Android, 500ms for iOS)"},
                     },
                     "required": ["x", "y"],
                 },
             ),
             Tool(
                 name="mobile_list_elements_on_screen",
-                description="화면의 요소와 좌표를 나열합니다. 이 결과를 캐시하지 마세요.",
+                description="""Get all interactive UI elements currently visible on screen.
+Returns element type, text, label, and coordinates for each element.
+Use the coordinates with mobile_click_on_screen_at_coordinates to tap elements.
+IMPORTANT: Always call this to find elements - do not guess coordinates.
+The result includes x, y, width, height for each element's bounding box.
+To tap an element's center, use: x + width/2, y + height/2.""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
@@ -203,13 +233,15 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_press_button",
-                description="디바이스의 버튼을 누릅니다.",
+                description="""Press a physical or system button on the device.
+Supported buttons: BACK (go back), HOME (go to home screen), VOLUME_UP, VOLUME_DOWN, ENTER (confirm/submit), DPAD_CENTER, DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT.
+Example: Press BACK to navigate back, HOME to exit app.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "button": {
                             "type": "string",
-                            "description": "누를 버튼. 지원되는 버튼: BACK, HOME, VOLUME_UP, VOLUME_DOWN, ENTER, DPAD_CENTER, DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT",
+                            "description": "Button name: BACK, HOME, VOLUME_UP, VOLUME_DOWN, ENTER, DPAD_CENTER, DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT",
                         }
                     },
                     "required": ["button"],
@@ -217,46 +249,56 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_open_url",
-                description="디바이스의 브라우저에서 URL을 엽니다.",
+                description="""Open a URL in the device's default browser.
+Example: open 'https://google.com' to launch browser with that page.""",
                 inputSchema={
                     "type": "object",
-                    "properties": {"url": {"type": "string", "description": "열 URL"}},
+                    "properties": {"url": {"type": "string", "description": "Full URL including https://"}},
                     "required": ["url"],
                 },
             ),
             Tool(
                 name="mobile_swipe_on_screen",
-                description="화면에서 스와이프합니다. x, y 좌표를 제공하면 해당 위치에서 스와이프하고, 제공하지 않으면 화면 중앙에서 스와이프합니다.",
+                description="""Perform a swipe gesture on the screen.
+Use direction 'up' to scroll down (reveal content below), 'down' to scroll up.
+If x,y provided, swipe starts from that point. Otherwise swipes from screen center.
+Use this to scroll through lists, pages, or navigate carousels.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "direction": {
                             "type": "string",
                             "enum": ["up", "down", "left", "right"],
-                            "description": "스와이프 방향",
+                            "description": "Swipe direction: up/down for vertical scroll, left/right for horizontal",
                         },
-                        "x": {"type": "number", "description": "스와이프 시작 X 좌표 (픽셀). 제공하지 않으면 화면 중앙 사용"},
-                        "y": {"type": "number", "description": "스와이프 시작 Y 좌표 (픽셀). 제공하지 않으면 화면 중앙 사용"},
-                        "distance": {"type": "number", "description": "스와이프 거리 (픽셀). iOS 기본값 400px, Android 기본값 화면 크기의 30%"},
+                        "x": {"type": "number", "description": "Starting X coordinate (optional, defaults to center)"},
+                        "y": {"type": "number", "description": "Starting Y coordinate (optional, defaults to center)"},
+                        "distance": {"type": "number", "description": "Swipe distance in pixels (optional)"},
                     },
                     "required": ["direction"],
                 },
             ),
             Tool(
                 name="mobile_type_keys",
-                description="포커스된 요소에 텍스트를 입력합니다.",
+                description="""Type text into the currently focused input field.
+First tap on an input field using mobile_click_on_screen_at_coordinates, then use this to type.
+Set submit=true to press Enter after typing (useful for search fields or login forms).
+Example: Type email, then type password, then tap login button.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "text": {"type": "string", "description": "입력할 텍스트"},
-                        "submit": {"type": "boolean", "description": "텍스트를 제출할지 여부"},
+                        "text": {"type": "string", "description": "Text to type"},
+                        "submit": {"type": "boolean", "description": "Press Enter/Submit after typing (true/false)"},
                     },
                     "required": ["text", "submit"],
                 },
             ),
             Tool(
                 name="mobile_take_screenshot",
-                description="모바일 디바이스의 스크린샷을 찍습니다. 이 결과를 캐시하지 마세요.",
+                description="""Capture a screenshot of the current screen.
+Returns the image directly - useful for visual verification.
+The screenshot is automatically resized to reduce token usage.
+Use this to see what's currently on screen before taking actions.""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
@@ -264,18 +306,22 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_save_screenshot",
-                description="모바일 디바이스의 스크린샷을 파일로 저장합니다.",
+                description="""Save a screenshot to a local file.
+Supports .png and .jpg formats based on file extension.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "path": {"type": "string", "description": "스크린샷을 저장할 파일 경로 (.png 또는 .jpg)"}
+                        "path": {"type": "string", "description": "File path to save screenshot (.png or .jpg)"}
                     },
                     "required": ["path"],
                 },
             ),
             Tool(
                 name="mobile_get_ui_state",
-                description="페이지 소스와 스크린샷을 동시에 가져와 화면 구성과 이미지를 확인합니다.",
+                description="""Get both screenshot AND UI elements in one call (most efficient).
+Returns a screenshot image plus a list of all interactive elements with their coordinates.
+Use this as your primary tool to understand what's on screen and find elements to interact with.
+This is more efficient than calling mobile_take_screenshot and mobile_list_elements_on_screen separately.""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
@@ -283,14 +329,15 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_set_orientation",
-                description="디바이스의 화면 방향을 변경합니다.",
+                description="""Rotate the device screen orientation.
+Use 'portrait' for vertical or 'landscape' for horizontal.""",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "orientation": {
                             "type": "string",
                             "enum": ["portrait", "landscape"],
-                            "description": "원하는 방향",
+                            "description": "Screen orientation: portrait (vertical) or landscape (horizontal)",
                         }
                     },
                     "required": ["orientation"],
@@ -298,7 +345,7 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_get_orientation",
-                description="디바이스의 현재 화면 방향을 가져옵니다.",
+                description="""Get the current screen orientation (portrait or landscape).""",
                 inputSchema={
                     "type": "object",
                     "properties": {},
