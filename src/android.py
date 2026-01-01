@@ -602,15 +602,29 @@ class AndroidRobot(Robot):
 
     async def clear_text_field(self) -> None:
         """현재 포커스된 텍스트 필드의 내용을 모두 삭제합니다."""
-        # Ctrl+A (전체 선택) 후 Delete
-        # KEYCODE_CTRL_LEFT = 113, KEYCODE_A = 29, KEYCODE_DEL = 67
-        # 또는 KEYCODE_MOVE_END로 끝으로 이동 후 KEYCODE_MOVE_HOME + shift로 전체 선택
+        # 비밀번호 필드에서는 전체 선택이 작동하지 않으므로
+        # 끝으로 이동 후 텍스트 길이만큼 백스페이스를 누름
 
-        # 방법 1: 끝으로 이동 → Shift+Home으로 전체 선택 → 삭제
+        # 1. 끝으로 이동
         self.adb("shell", "input", "keyevent", "KEYCODE_MOVE_END")
-        # Shift+Home (KEYCODE_SHIFT_LEFT=59, KEYCODE_MOVE_HOME=122)
-        self.adb("shell", "input", "keyevent", "--longpress", "59", "122")
-        self.adb("shell", "input", "keyevent", "KEYCODE_DEL")
+
+        # 2. 현재 포커스된 요소의 텍스트 길이 확인
+        elements = await self.list_elements_on_screen()
+        text_length = 0
+        for elem in elements:
+            if elem.get("focused") is True:
+                text = elem.get("text", "")
+                text_length = len(text) if text else 0
+                break
+
+        # 텍스트 길이를 알 수 없는 경우 (비밀번호 필드 등) 충분한 횟수로 삭제
+        delete_count = text_length if text_length > 0 else 50
+
+        # 3. 백스페이스로 삭제 (한번에 여러 키 전송)
+        if delete_count > 0:
+            # input keyevent을 반복 호출하면 느리므로, 여러 키를 한번에 전송
+            del_keys = " ".join(["67"] * delete_count)  # KEYCODE_DEL = 67
+            self.adb("shell", "input", "keyevent", *del_keys.split())
 
     async def _get_ui_automator_dump(self) -> str:
         """UI Automator 덤프를 가져옵니다."""
