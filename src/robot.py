@@ -71,6 +71,24 @@ class Robot(Protocol):
     ) -> None:
         """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
         ...
+
+    async def drag_between_points(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        hold_ms: Optional[int] = None,
+        move_ms: Optional[int] = None,
+    ) -> None:
+        """지정된 두 좌표 간 드래그 앤 드롭을 수행합니다."""
+        ...
+
+    async def swipe_from_coordinate(
+        self, x: int, y: int, direction: SwipeDirection, distance: Optional[int] = None
+    ) -> None:
+        """특정 좌표에서 시작하는 방향 스와이프를 수행합니다."""
+        ...
     
     async def get_screenshot(self) -> bytes:
         """화면의 스크린샷을 가져옵니다. PNG 이미지가 포함된 bytes를 반환합니다."""
@@ -94,6 +112,10 @@ class Robot(Protocol):
     
     async def send_keys(self, text: str) -> None:
         """키보드 입력을 시뮬레이션하여 기기에 키를 전송합니다."""
+        ...
+
+    async def clear_focused_input(self) -> None:
+        """현재 포커스된 입력 필드를 비웁니다."""
         ...
     
     async def press_button(self, button: Button) -> None:

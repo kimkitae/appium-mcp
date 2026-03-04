@@ -18,6 +18,7 @@ class Simulator:
     name: str
     uuid: str
     state: str
+    runtime: Optional[str] = None
 
 
 @dataclass
@@ -79,7 +80,11 @@ class Simctl(Robot):
     
     async def get_screenshot(self) -> bytes:
         """스크린샷을 가져옵니다."""
-        return self._simctl("io", self.simulator_uuid, "screenshot", "-")
+        try:
+            wda = await self._wda()
+            return await wda.get_screenshot()
+        except Exception:
+            return self._simctl("io", self.simulator_uuid, "screenshot", "-")
     
     async def open_url(self, url: str) -> None:
         """URL을 엽니다."""
@@ -184,6 +189,9 @@ class Simctl(Robot):
     
     async def send_keys(self, text: str) -> None:
         """키 입력을 전송합니다."""
+        if text == "":
+            return
+
         wda = await self._wda()
         await wda.send_keys(text)
     
@@ -191,6 +199,35 @@ class Simctl(Robot):
         """스와이프합니다."""
         wda = await self._wda()
         await wda.swipe(direction)
+
+    async def swipe_between_points(
+        self, start_x: int, start_y: int, end_x: int, end_y: int
+    ) -> None:
+        """지정된 좌표에서 다른 좌표까지 스와이프합니다."""
+        wda = await self._wda()
+        await wda.swipe_between_points(start_x, start_y, end_x, end_y)
+
+    async def drag_between_points(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        hold_ms: Optional[int] = None,
+        move_ms: Optional[int] = None,
+    ) -> None:
+        """지정된 좌표 간 드래그를 수행합니다."""
+        wda = await self._wda()
+        await wda.drag_between_points(
+            start_x, start_y, end_x, end_y, hold_ms=hold_ms, move_ms=move_ms
+        )
+
+    async def swipe_from_coordinate(
+        self, x: int, y: int, direction: SwipeDirection, distance: Optional[int] = None
+    ) -> None:
+        """특정 좌표에서 시작하는 방향 스와이프를 수행합니다."""
+        wda = await self._wda()
+        await wda.swipe_from_coordinate(x, y, direction, distance)
     
     async def tap(self, x: int, y: int) -> None:
         """지정된 좌표를 탭합니다."""
@@ -201,6 +238,11 @@ class Simctl(Robot):
         """버튼을 누릅니다."""
         wda = await self._wda()
         await wda.press_button(button)
+
+    async def clear_focused_input(self) -> None:
+        """포커스된 입력값을 지웁니다."""
+        wda = await self._wda()
+        await wda.clear_focused_input()
     
     async def get_elements_on_screen(self) -> List[ScreenElement]:
         """화면의 모든 요소를 가져옵니다."""
@@ -240,10 +282,13 @@ class SimctlManager:
             
             for runtime, devices in data.get("devices", {}).items():
                 for device in devices:
+                    if device.get("isAvailable") is False:
+                        continue
                     simulators.append(Simulator(
                         name=device["name"],
                         uuid=device["udid"],
-                        state=device["state"]
+                        state=device["state"],
+                        runtime=runtime
                     ))
             
             return simulators
@@ -259,6 +304,23 @@ class SimctlManager:
             if sim.state == "Booted"
         ]
     
-    def get_simulator(self, uuid: str) -> Simctl:
+    def get_simulator(self, identifier: str) -> Simctl:
         """시뮬레이터 인스턴스를 가져옵니다."""
-        return Simctl(uuid) 
+        simulators = self.list_simulators()
+        by_uuid = next((sim for sim in simulators if sim.uuid == identifier), None)
+        if by_uuid:
+            return Simctl(by_uuid.uuid)
+
+        matched_by_name = [sim for sim in simulators if sim.name == identifier]
+        if len(matched_by_name) == 1:
+            return Simctl(matched_by_name[0].uuid)
+
+        if len(matched_by_name) > 1:
+            uuids = ", ".join(sim.uuid for sim in matched_by_name)
+            raise ActionableError(
+                f'이름 "{identifier}" 인 시뮬레이터가 여러 개입니다. UUID를 사용하세요: {uuids}'
+            )
+
+        raise ActionableError(
+            f'시뮬레이터 "{identifier}"를 찾을 수 없습니다. mobile_list_available_devices로 확인하세요.'
+        )

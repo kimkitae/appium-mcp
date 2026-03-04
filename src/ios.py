@@ -4,7 +4,7 @@ import socket
 import tempfile
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from dataclasses import dataclass
 import secrets
 
@@ -159,6 +159,42 @@ class IosRobot(Robot):
             int(end_x / scale),
             int(end_y / scale),
         )
+
+    async def drag_between_points(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        hold_ms: Optional[int] = None,
+        move_ms: Optional[int] = None,
+    ) -> None:
+        """지정된 좌표 간 드래그를 수행합니다."""
+        wda = await self._wda()
+        screen = await wda.get_screen_size()
+        scale = screen.scale if screen else 1
+        await wda.drag_between_points(
+            int(start_x / scale),
+            int(start_y / scale),
+            int(end_x / scale),
+            int(end_y / scale),
+            hold_ms=hold_ms,
+            move_ms=move_ms,
+        )
+
+    async def swipe_from_coordinate(
+        self, x: int, y: int, direction: SwipeDirection, distance: Optional[int] = None
+    ) -> None:
+        """특정 좌표에서 시작하는 방향 스와이프를 수행합니다."""
+        wda = await self._wda()
+        screen = await wda.get_screen_size()
+        scale = screen.scale if screen else 1
+        await wda.swipe_from_coordinate(
+            int(x / scale),
+            int(y / scale),
+            direction,
+            int(distance / scale) if distance else None,
+        )
     
     async def list_apps(self) -> List[InstalledApp]:
         """설치된 앱 목록을 가져옵니다."""
@@ -196,8 +232,16 @@ class IosRobot(Robot):
     
     async def send_keys(self, text: str) -> None:
         """키 입력을 전송합니다."""
+        if text == "":
+            return
+
         wda = await self._wda()
         await wda.send_keys(text)
+
+    async def clear_focused_input(self) -> None:
+        """포커스된 입력값을 지웁니다."""
+        wda = await self._wda()
+        await wda.clear_focused_input()
     
     async def press_button(self, button: Button) -> None:
         """버튼을 누릅니다."""
@@ -218,24 +262,26 @@ class IosRobot(Robot):
     
     async def get_screenshot(self) -> bytes:
         """스크린샷을 가져옵니다."""
-        await self._assert_tunnel_running()
-        
-        # 임시 파일 생성
-        with tempfile.NamedTemporaryFile(
-            suffix='.png', 
-            prefix=f'screenshot-{secrets.token_hex(8)}-',
-            delete=False
-        ) as tmp_file:
-            tmp_filename = tmp_file.name
-        
         try:
-            await self._ios("screenshot", "--output", tmp_filename)
-            
-            with open(tmp_filename, 'rb') as f:
-                return f.read()
-        finally:
-            # 임시 파일 삭제
-            Path(tmp_filename).unlink(missing_ok=True)
+            wda = await self._wda()
+            return await wda.get_screenshot()
+        except Exception:
+            # WDA가 불안정한 경우 go-ios 스크린샷으로 폴백합니다.
+            await self._assert_tunnel_running()
+
+            with tempfile.NamedTemporaryFile(
+                suffix=".png",
+                prefix=f"screenshot-{secrets.token_hex(8)}-",
+                delete=False,
+            ) as tmp_file:
+                tmp_filename = tmp_file.name
+
+            try:
+                await self._ios("screenshot", "--output", tmp_filename)
+                with open(tmp_filename, "rb") as f:
+                    return f.read()
+            finally:
+                Path(tmp_filename).unlink(missing_ok=True)
     
     async def set_orientation(self, orientation: Orientation) -> None:
         """화면 방향을 설정합니다."""

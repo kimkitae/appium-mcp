@@ -51,6 +51,29 @@ class TestSwipeGestures(unittest.TestCase):
             self.assertEqual(args[2], "swipe")
             self.assertEqual(args[3:], ("10", "20", "30", "40", "1000"))
 
+    def test_android_swipe_from_coordinate(self):
+        robot = AndroidRobot("serial")
+        mock_size = ScreenSize(width=1000, height=2000, scale=1)
+        with patch.object(
+            robot, "get_screen_size", AsyncMock(return_value=mock_size)
+        ), patch.object(robot, "adb") as mock_adb:
+            asyncio.run(robot.swipe_from_coordinate(500, 1000, "up", 400))
+            args = mock_adb.call_args[0]
+            self.assertEqual(args[0], "shell")
+            self.assertEqual(args[1], "input")
+            self.assertEqual(args[2], "swipe")
+            self.assertEqual(args[3:], ("500", "1000", "500", "600", "1000"))
+
+    def test_android_drag_between_points(self):
+        robot = AndroidRobot("serial")
+        with patch.object(robot, "adb") as mock_adb:
+            asyncio.run(robot.drag_between_points(10, 20, 30, 40, move_ms=650))
+            args = mock_adb.call_args[0]
+            self.assertEqual(args[0], "shell")
+            self.assertEqual(args[1], "input")
+            self.assertEqual(args[2], "swipe")
+            self.assertEqual(args[3:], ("10", "20", "30", "40", "650"))
+
     def test_wda_swipe_right(self):
         wda = WebDriverAgent("localhost", 8100)
         posts = []
@@ -86,6 +109,32 @@ class TestSwipeGestures(unittest.TestCase):
             self.assertEqual(actions[0]["y"], 2)
             self.assertEqual(actions[2]["x"], 3)
             self.assertEqual(actions[2]["y"], 4)
+
+    def test_wda_swipe_from_coordinate(self):
+        wda = WebDriverAgent("localhost", 8100)
+        with patch.object(
+            wda, "swipe_between_points", AsyncMock()
+        ) as mock_swipe_between:
+            asyncio.run(wda.swipe_from_coordinate(100, 200, "right", 300))
+            mock_swipe_between.assert_awaited_with(100, 200, 400, 200)
+
+    def test_wda_drag_between_points(self):
+        wda = WebDriverAgent("localhost", 8100)
+        posts = []
+        with patch.object(
+            wda, "within_session", side_effect=lambda fn: fn("http://localhost:8100/session/1")
+        ), patch(
+            "aiohttp.ClientSession", lambda: DummySession(posts)
+        ):
+            asyncio.run(wda.drag_between_points(10, 20, 40, 60, hold_ms=120, move_ms=700))
+            self.assertEqual(posts[0][0], "http://localhost:8100/session/1/actions")
+            actions = posts[0][1]["actions"][0]["actions"]
+            self.assertEqual(actions[0]["x"], 10)
+            self.assertEqual(actions[0]["y"], 20)
+            self.assertEqual(actions[2]["duration"], 120)
+            self.assertEqual(actions[3]["x"], 40)
+            self.assertEqual(actions[3]["y"], 60)
+            self.assertEqual(actions[3]["duration"], 700)
 
 
 if __name__ == "__main__":

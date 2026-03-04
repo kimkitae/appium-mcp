@@ -1,21 +1,20 @@
 import asyncio
 import base64
 import json
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
 from mcp.server import Server
-from mcp.server.models import InitializationOptions
 from mcp.types import ImageContent, TextContent, Tool
-from pydantic import BaseModel, Field
 
 from .__init__ import __version__
 from .android import AndroidDeviceManager, AndroidRobot
+from .image_utils import Image, is_scaling_available
 from .ios import IosManager, IosRobot
 from .iphone_simulator import SimctlManager
 from .logger import error, trace
 from .png import PNG
-from .robot import ActionableError, Robot
+from .robot import ActionableError, Robot, ScreenElement
 
 
 def get_agent_version() -> str:
@@ -65,6 +64,131 @@ def create_mcp_server() -> Server:
                 "mobile_use_device 도구를 사용하여 디바이스를 선택하세요."
             )
 
+    def serialize_elements(elements: List[Any], scale: float) -> str:
+        """화면 요소를 토큰 효율적인 형태로 직렬화합니다."""
+        output = []
+        for element in elements:
+            item: Dict[str, Any] = {
+                "type": element.type,
+                "coordinates": {
+                    "x": int(element.rect.x * scale),
+                    "y": int(element.rect.y * scale),
+                    "width": int(element.rect.width * scale),
+                    "height": int(element.rect.height * scale),
+                },
+            }
+
+            if element.text:
+                item["text"] = element.text
+            if element.label:
+                item["label"] = element.label
+            if element.name:
+                item["name"] = element.name
+            if element.value:
+                item["value"] = element.value
+            if element.identifier:
+                item["identifier"] = element.identifier
+            if element.focused:
+                item["focused"] = True
+
+            output.append(item)
+
+        return json.dumps(output, ensure_ascii=False, separators=(",", ":"))
+
+    def element_search_fields(element: ScreenElement) -> List[str]:
+        fields: List[str] = []
+        for value in (
+            element.identifier,
+            element.text,
+            element.label,
+            element.name,
+            element.value,
+            element.type,
+        ):
+            if value:
+                fields.append(str(value))
+        return fields
+
+    def find_element_by_query(
+        elements: List[ScreenElement], query: str, index: int = 0, exact_match: bool = False
+    ) -> ScreenElement:
+        query_text = query.strip().lower()
+        if not query_text:
+            raise ActionableError("엘리먼트 검색어가 비어 있습니다.")
+
+        ranked: List[Tuple[int, ScreenElement]] = []
+        for element in elements:
+            fields = element_search_fields(element)
+            best_score = -1
+
+            for field in fields:
+                lowered = field.lower()
+                if exact_match:
+                    if lowered == query_text:
+                        best_score = max(best_score, 1000)
+                else:
+                    if lowered == query_text:
+                        best_score = max(best_score, 1000)
+                    elif lowered.startswith(query_text):
+                        best_score = max(best_score, 700)
+                    elif query_text in lowered:
+                        best_score = max(best_score, 500)
+
+            if best_score >= 0:
+                area = max(1, element.rect.width * element.rect.height)
+                ranked.append((best_score * 10 + min(area, 999), element))
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        if not ranked:
+            raise ActionableError(
+                f'검색어 "{query}"와 일치하는 엘리먼트를 찾을 수 없습니다. '
+                "먼저 mobile_list_elements_on_screen으로 값을 확인하세요."
+            )
+
+        if index < 0 or index >= len(ranked):
+            raise ActionableError(
+                f'검색어 "{query}"에 대한 index {index}가 범위를 벗어났습니다. '
+                f"일치 개수: {len(ranked)}"
+            )
+
+        return ranked[index][1]
+
+    def get_center_coordinates(element: ScreenElement, scale: float) -> Tuple[int, int]:
+        center_x = int((element.rect.x + (element.rect.width / 2)) * scale)
+        center_y = int((element.rect.y + (element.rect.height / 2)) * scale)
+        return center_x, center_y
+
+    def describe_element(element: ScreenElement) -> str:
+        for value in (
+            element.identifier,
+            element.text,
+            element.label,
+            element.name,
+            element.value,
+            element.type,
+        ):
+            if value:
+                return str(value)
+        return element.type
+
+    def compress_screenshot(screenshot: bytes, quality: int = 70) -> Tuple[bytes, str]:
+        """스크린샷을 압축 가능한 경우 JPEG로 변환합니다."""
+        image = PNG(screenshot)
+        png_size = image.get_dimensions()
+        if png_size.width <= 0 or png_size.height <= 0:
+            raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
+
+        if not is_scaling_available():
+            return screenshot, "image/png"
+
+        safe_quality = max(40, min(int(quality), 95))
+        try:
+            compressed = Image.from_buffer(screenshot).jpeg({"quality": safe_quality}).to_buffer()
+            return compressed, "image/jpeg"
+        except Exception:
+            # 압축 도구 오류 시 원본 이미지로 폴백
+            return screenshot, "image/png"
+
     # 도구 정의
 
     @server.list_tools()
@@ -73,7 +197,7 @@ def create_mcp_server() -> Server:
         return [
             Tool(
                 name="mobile_list_available_devices",
-                description="사용 가능한 모든 디바이스를 나열합니다. 물리적 디바이스와 시뮬레이터를 모두 포함합니다.",
+                description="사용 가능한 iOS/Android 디바이스를 나열합니다. 실기기, 시뮬레이터, 에뮬레이터를 모두 포함합니다.",
                 inputSchema={
                     "type": "object",
                     "properties": {},
@@ -81,11 +205,11 @@ def create_mcp_server() -> Server:
             ),
             Tool(
                 name="mobile_use_device",
-                description="사용할 디바이스를 선택합니다. 시뮬레이터 또는 Android 디바이스일 수 있습니다.",
+                description="사용할 디바이스를 선택합니다. device에는 디바이스 ID(권장) 또는 이름을 넣습니다.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "device": {"type": "string", "description": "선택할 디바이스의 이름"},
+                        "device": {"type": "string", "description": "선택할 디바이스 ID 또는 이름"},
                         "deviceType": {
                             "type": "string",
                             "enum": ["simulator", "ios", "android"],
@@ -177,8 +301,8 @@ def create_mcp_server() -> Server:
                 },
             ),
             Tool(
-                name="swipe_on_screen",
-                description="화면에서 스와이프합니다.",
+                name="mobile_swipe_on_screen",
+                description="화면에서 스와이프합니다. 좌표 시작점(x,y)을 주면 특정 위치에서 스와이프합니다.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -186,6 +310,18 @@ def create_mcp_server() -> Server:
                             "type": "string",
                             "enum": ["up", "down", "left", "right"],
                             "description": "스와이프 방향",
+                        },
+                        "x": {
+                            "type": "number",
+                            "description": "스와이프 시작 X 좌표. y와 함께 사용합니다.",
+                        },
+                        "y": {
+                            "type": "number",
+                            "description": "스와이프 시작 Y 좌표. x와 함께 사용합니다.",
+                        },
+                        "distance": {
+                            "type": "number",
+                            "description": "스와이프 거리(px). 미지정 시 기본 거리 사용",
                         },
                         "start_x": {"type": "integer", "description": "시작 X 좌표"},
                         "start_y": {"type": "integer", "description": "시작 Y 좌표"},
@@ -196,6 +332,68 @@ def create_mcp_server() -> Server:
                 },
             ),
             Tool(
+                name="swipe_on_screen",
+                description="(호환용) 화면에서 스와이프합니다. mobile_swipe_on_screen 사용을 권장합니다.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "direction": {
+                            "type": "string",
+                            "enum": ["up", "down", "left", "right"],
+                            "description": "스와이프 방향",
+                        },
+                        "x": {"type": "number", "description": "스와이프 시작 X 좌표"},
+                        "y": {"type": "number", "description": "스와이프 시작 Y 좌표"},
+                        "distance": {"type": "number", "description": "스와이프 거리(px)"},
+                        "start_x": {"type": "integer", "description": "시작 X 좌표"},
+                        "start_y": {"type": "integer", "description": "시작 Y 좌표"},
+                        "end_x": {"type": "integer", "description": "끝 X 좌표"},
+                        "end_y": {"type": "integer", "description": "끝 Y 좌표"},
+                    },
+                    "required": [],
+                },
+            ),
+            Tool(
+                name="mobile_drag_and_drop",
+                description="출발 엘리먼트에서 도착 엘리먼트로 드래그 앤 드롭합니다. 좌표 대신 엘리먼트 검색어를 사용합니다.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "sourceElement": {
+                            "type": "string",
+                            "description": "출발 엘리먼트 검색어 (text/label/name/identifier 중 하나)",
+                        },
+                        "targetElement": {
+                            "type": "string",
+                            "description": "도착 엘리먼트 검색어 (text/label/name/identifier 중 하나)",
+                        },
+                        "sourceIndex": {
+                            "type": "integer",
+                            "description": "동일 검색 결과가 여러 개인 경우 출발 엘리먼트 인덱스(기본 0)",
+                        },
+                        "targetIndex": {
+                            "type": "integer",
+                            "description": "동일 검색 결과가 여러 개인 경우 도착 엘리먼트 인덱스(기본 0)",
+                        },
+                        "exactMatch": {
+                            "type": "boolean",
+                            "description": "검색어를 정확히 일치시킬지 여부 (기본 false)",
+                        },
+                        "holdMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "드래그 시작점에서 누르고 있을 시간(ms, 기본 250)",
+                        },
+                        "moveMs": {
+                            "type": "integer",
+                            "minimum": 100,
+                            "description": "드래그 이동 시간(ms, 기본 850)",
+                        },
+                    },
+                    "required": ["sourceElement", "targetElement"],
+                },
+            ),
+            Tool(
                 name="mobile_type_keys",
                 description="포커스된 요소에 텍스트를 입력합니다.",
                 inputSchema={
@@ -203,24 +401,50 @@ def create_mcp_server() -> Server:
                     "properties": {
                         "text": {"type": "string", "description": "입력할 텍스트"},
                         "submit": {"type": "boolean", "description": "텍스트를 제출할지 여부"},
+                        "clearBeforeTyping": {
+                            "type": "boolean",
+                            "description": "입력 전에 현재 포커스된 입력값을 먼저 지울지 여부",
+                        },
                     },
                     "required": ["text", "submit"],
                 },
             ),
             Tool(
                 name="mobile_take_screenshot",
-                description="모바일 디바이스의 스크린샷을 찍습니다. 이 결과를 캐시하지 마세요.",
+                description="모바일 디바이스의 스크린샷을 찍습니다. 기본적으로 JPEG 압축을 적용합니다. 이 결과를 캐시하지 마세요.",
                 inputSchema={
                     "type": "object",
-                    "properties": {},
+                    "properties": {
+                        "quality": {
+                            "type": "integer",
+                            "minimum": 40,
+                            "maximum": 95,
+                            "description": "JPEG 품질(40~95). 기본값 70",
+                        }
+                    },
                 },
             ),
             Tool(
                 name="mobile_get_ui_state",
-                description="페이지 소스와 스크린샷을 동시에 가져와 화면 구성과 이미지를 확인합니다.",
+                description="기본적으로 화면 요소만 반환합니다. 필요할 때만 includeScreenshot=true로 이미지를 포함해 비용을 줄이세요.",
                 inputSchema={
                     "type": "object",
-                    "properties": {},
+                    "properties": {
+                        "includeElements": {
+                            "type": "boolean",
+                            "description": "화면 요소 목록 포함 여부 (기본 true)",
+                        },
+                        "includeScreenshot": {
+                            "type": "boolean",
+                            "description": "스크린샷 이미지 포함 여부 (기본 false)",
+                        },
+                        "quality": {
+                            "type": "integer",
+                            "minimum": 40,
+                            "maximum": 95,
+                            "description": "includeScreenshot=true 일 때 JPEG 품질(기본 70)",
+                        },
+                    },
                 },
             ),
             Tool(
@@ -261,28 +485,49 @@ def create_mcp_server() -> Server:
             if name == "mobile_list_available_devices":
                 ios_manager = IosManager()
                 android_manager = AndroidDeviceManager()
-                devices = simulator_manager.list_booted_simulators()
-                simulator_names = [d.name for d in devices]
+                simulators = simulator_manager.list_simulators()
                 ios_devices_task = asyncio.create_task(ios_manager.list_devices())
                 android_devices = android_manager.get_connected_devices()
                 ios_devices = await ios_devices_task
-                ios_device_names = [d.device_id for d in ios_devices]
-                android_tv_devices = [d.device_id for d in android_devices if d.device_type == "tv"]
-                android_mobile_devices = [
-                    d.device_id for d in android_devices if d.device_type == "mobile"
-                ]
+                devices_payload: List[Dict[str, Any]] = []
 
-                resp = ["발견된 디바이스:"]
-                if simulator_names:
-                    resp.append(f"iOS 시뮬레이터: [{', '.join(simulator_names)}]")
-                if ios_devices:
-                    resp.append(f"iOS 디바이스: [{', '.join(ios_device_names)}]")
-                if android_mobile_devices:
-                    resp.append(f"Android 디바이스: [{', '.join(android_mobile_devices)}]")
-                if android_tv_devices:
-                    resp.append(f"Android TV 디바이스: [{', '.join(android_tv_devices)}]")
+                for sim in simulators:
+                    devices_payload.append(
+                        {
+                            "id": sim.uuid,
+                            "name": sim.name,
+                            "platform": "ios",
+                            "type": "simulator",
+                            "state": sim.state.lower(),
+                            "runtime": sim.runtime,
+                        }
+                    )
 
-                result = "\n".join(resp)
+                for device in ios_devices:
+                    devices_payload.append(
+                        {
+                            "id": device.device_id,
+                            "name": device.device_name,
+                            "platform": "ios",
+                            "type": "real",
+                            "state": "online",
+                        }
+                    )
+
+                for device in android_devices:
+                    devices_payload.append(
+                        {
+                            "id": device.device_id,
+                            "name": device.device_name or device.device_id,
+                            "platform": "android",
+                            "type": device.connection_type,
+                            "deviceCategory": device.device_type,
+                            "version": device.os_version or "unknown",
+                            "state": "online",
+                        }
+                    )
+
+                result = json.dumps({"devices": devices_payload}, ensure_ascii=False)
 
             elif name == "mobile_use_device":
                 device = arguments["device"]
@@ -294,8 +539,10 @@ def create_mcp_server() -> Server:
                     robot = IosRobot(device)
                 elif device_type == "android":
                     robot = AndroidRobot(device)
+                else:
+                    raise ActionableError(f"지원하지 않는 deviceType: {device_type}")
 
-                result = f"선택된 디바이스: {device}"
+                result = f"선택된 디바이스: {device} ({device_type})"
 
             elif name == "mobile_list_apps":
                 require_robot()
@@ -337,28 +584,8 @@ def create_mcp_server() -> Server:
                 screen_size = await robot.get_screen_size()
                 scale = screen_size.scale if screen_size else 1
                 elements = await robot.get_elements_on_screen()
-
-                element_list = []
-                for element in elements:
-                    elem_dict = {
-                        "type": element.type,
-                        "text": element.text,
-                        "label": element.label,
-                        "name": element.name,
-                        "value": element.value,
-                        "identifier": element.identifier,
-                        "coordinates": {
-                            "x": int(element.rect.x * scale),
-                            "y": int(element.rect.y * scale),
-                            "width": int(element.rect.width * scale),
-                            "height": int(element.rect.height * scale),
-                        },
-                    }
-                    if element.focused:
-                        elem_dict["focused"] = True
-                    element_list.append(elem_dict)
-
-                result = f"화면에서 발견된 요소: {json.dumps(element_list)}"
+                serialized = serialize_elements(elements, scale)
+                result = f"화면에서 발견된 요소: {serialized}"
 
             elif name == "mobile_press_button":
                 require_robot()
@@ -372,18 +599,29 @@ def create_mcp_server() -> Server:
                 await robot.open_url(url)
                 result = f"URL 열림: {url}"
 
-            elif name == "swipe_on_screen":
+            elif name in ("swipe_on_screen", "mobile_swipe_on_screen"):
                 require_robot()
                 if all(
                     key in arguments for key in ("start_x", "start_y", "end_x", "end_y")
                 ):
-                    start_x = arguments["start_x"]
-                    start_y = arguments["start_y"]
-                    end_x = arguments["end_x"]
-                    end_y = arguments["end_y"]
+                    start_x = int(arguments["start_x"])
+                    start_y = int(arguments["start_y"])
+                    end_x = int(arguments["end_x"])
+                    end_y = int(arguments["end_y"])
                     await robot.swipe_between_points(start_x, start_y, end_x, end_y)
                     result = (
                         f"화면에서 ({start_x},{start_y}) -> ({end_x},{end_y}) 로 스와이프됨"
+                    )
+                elif "direction" in arguments and "x" in arguments and "y" in arguments:
+                    direction = arguments["direction"]
+                    x = int(arguments["x"])
+                    y = int(arguments["y"])
+                    distance = arguments.get("distance")
+                    swipe_distance = int(distance) if distance is not None else None
+                    await robot.swipe_from_coordinate(x, y, direction, swipe_distance)
+                    distance_text = f", 거리 {swipe_distance}px" if swipe_distance else ""
+                    result = (
+                        f"화면에서 ({x},{y}) 시작 {direction} 스와이프 실행됨{distance_text}"
                     )
                 elif "direction" in arguments:
                     direction = arguments["direction"]
@@ -391,86 +629,114 @@ def create_mcp_server() -> Server:
                     result = f"화면에서 {direction} 방향으로 스와이프됨"
                 else:
                     raise ActionableError(
-                        "direction 인자 또는 start_x, start_y, end_x, end_y 인자 모두가 필요합니다."
+                        "direction 또는 (start_x,start_y,end_x,end_y) 또는 (direction,x,y) 인자가 필요합니다."
                     )
+
+            elif name == "mobile_drag_and_drop":
+                require_robot()
+                source_query = arguments["sourceElement"]
+                target_query = arguments["targetElement"]
+                source_index = int(arguments.get("sourceIndex", 0))
+                target_index = int(arguments.get("targetIndex", 0))
+                exact_match = bool(arguments.get("exactMatch", False))
+                hold_ms = arguments.get("holdMs")
+                move_ms = arguments.get("moveMs")
+                hold_ms_int = int(hold_ms) if hold_ms is not None else None
+                move_ms_int = int(move_ms) if move_ms is not None else None
+
+                screen_size = await robot.get_screen_size()
+                scale = screen_size.scale if screen_size else 1
+                elements = await robot.get_elements_on_screen()
+
+                source_element = find_element_by_query(
+                    elements, source_query, index=source_index, exact_match=exact_match
+                )
+                target_element = find_element_by_query(
+                    elements, target_query, index=target_index, exact_match=exact_match
+                )
+
+                start_x, start_y = get_center_coordinates(source_element, scale)
+                end_x, end_y = get_center_coordinates(target_element, scale)
+
+                await robot.drag_between_points(
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
+                    hold_ms=hold_ms_int,
+                    move_ms=move_ms_int,
+                )
+
+                source_name = describe_element(source_element)
+                target_name = describe_element(target_element)
+                result = (
+                    f'드래그 앤 드롭 실행됨: "{source_name}" -> "{target_name}" '
+                    f"(index: {source_index}->{target_index})"
+                )
 
             elif name == "mobile_type_keys":
                 require_robot()
                 text = arguments["text"]
                 submit = arguments["submit"]
+                clear_before_typing = bool(arguments.get("clearBeforeTyping", False))
+
+                if clear_before_typing:
+                    await robot.clear_focused_input()
+
                 await robot.send_keys(text)
 
                 if submit:
                     await robot.press_button("ENTER")
 
-                result = f"텍스트 입력됨: {text}"
+                cleared_text = " (기존 입력 삭제 후)" if clear_before_typing else ""
+                result = f"텍스트 입력됨{cleared_text}: {text}"
 
             elif name == "mobile_take_screenshot":
                 require_robot()
                 screenshot = await robot.get_screenshot()
-                mime_type = "image/png"
-
-                # PNG 유효성 검증
-                image = PNG(screenshot)
-                png_size = image.get_dimensions()
-                if png_size.width <= 0 or png_size.height <= 0:
-                    raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
-
-                # 이미지 크기를 조정하지 않고 원본을 그대로 사용합니다
-
+                quality = int(arguments.get("quality", 70))
+                screenshot, mime_type = compress_screenshot(screenshot, quality)
                 screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
-                trace(f"스크린샷 촬영됨: {len(screenshot)} 바이트")
+                trace(
+                    f"스크린샷 촬영됨: {len(screenshot)} 바이트, mime={mime_type}, quality={quality}"
+                )
 
                 return [ImageContent(type="image", data=screenshot_b64, mimeType=mime_type)]
 
             elif name == "mobile_get_ui_state":
                 require_robot()
-                screen_size_task = asyncio.create_task(robot.get_screen_size())
-                screenshot_task = asyncio.create_task(robot.get_screenshot())
-                elements_task = asyncio.create_task(robot.get_elements_on_screen())
+                include_elements = bool(arguments.get("includeElements", True))
+                include_screenshot = bool(arguments.get("includeScreenshot", False))
+                quality = int(arguments.get("quality", 70))
 
-                screen_size = await screen_size_task
-                screenshot = await screenshot_task
-                elements = await elements_task
-                mime_type = "image/png"
+                if not include_elements and not include_screenshot:
+                    raise ActionableError(
+                        "includeElements와 includeScreenshot이 모두 false 입니다. 하나 이상 true여야 합니다."
+                    )
 
-                image = PNG(screenshot)
-                png_size = image.get_dimensions()
-                if png_size.width <= 0 or png_size.height <= 0:
-                    raise ActionableError("스크린샷이 유효하지 않습니다. 다시 시도하세요.")
+                content: List[TextContent | ImageContent] = []
 
-                # 이미지 크기를 조정하지 않고 원본을 그대로 사용합니다
+                screen_size: Optional[Any] = None
+                if include_elements:
+                    screen_size = await robot.get_screen_size()
+                    scale = screen_size.scale if screen_size else 1
+                    elements = await robot.get_elements_on_screen()
+                    serialized = serialize_elements(elements, scale)
+                    result = f"화면에서 발견된 요소: {serialized}"
+                    content.append(TextContent(type="text", text=result))
 
-                screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
-                trace(f"스크린샷 촬영됨: {len(screenshot)} 바이트")
+                if include_screenshot:
+                    screenshot = await robot.get_screenshot()
+                    screenshot, mime_type = compress_screenshot(screenshot, quality)
+                    screenshot_b64 = base64.b64encode(screenshot).decode("utf-8")
+                    trace(
+                        f"UI 상태 스크린샷 포함: {len(screenshot)} 바이트, mime={mime_type}, quality={quality}"
+                    )
+                    content.append(
+                        ImageContent(type="image", data=screenshot_b64, mimeType=mime_type)
+                    )
 
-                element_list = []
-                scale = screen_size.scale if screen_size else 1
-                for element in elements:
-                    elem_dict = {
-                        "type": element.type,
-                        "text": element.text,
-                        "label": element.label,
-                        "name": element.name,
-                        "value": element.value,
-                        "identifier": element.identifier,
-                        "coordinates": {
-                            "x": int(element.rect.x * scale),
-                            "y": int(element.rect.y * scale),
-                            "width": int(element.rect.width * scale),
-                            "height": int(element.rect.height * scale),
-                        },
-                    }
-                    if element.focused:
-                        elem_dict["focused"] = True
-                    element_list.append(elem_dict)
-
-                result = f"화면에서 발견된 요소: {json.dumps(element_list)}"
-
-                return [
-                    TextContent(type="text", text=result),
-                    ImageContent(type="image", data=screenshot_b64, mimeType=mime_type),
-                ]
+                return content
 
             elif name == "mobile_set_orientation":
                 require_robot()

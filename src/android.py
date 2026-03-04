@@ -1,3 +1,4 @@
+import base64
 import os
 import subprocess
 import xml.etree.ElementTree as ET
@@ -23,6 +24,9 @@ class AndroidDevice:
 
     device_id: str
     device_type: Literal["tv", "mobile"]
+    device_name: Optional[str] = None
+    os_version: Optional[str] = None
+    connection_type: Literal["real", "emulator"] = "real"
 
 
 @dataclass
@@ -202,6 +206,54 @@ class AndroidRobot(Robot):
             "1000",
         )
 
+    async def drag_between_points(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        hold_ms: Optional[int] = None,
+        move_ms: Optional[int] = None,
+    ) -> None:
+        """지정된 좌표 간 드래그를 수행합니다."""
+        duration = int(move_ms) if move_ms is not None else 900
+        self.adb(
+            "shell",
+            "input",
+            "swipe",
+            str(start_x),
+            str(start_y),
+            str(end_x),
+            str(end_y),
+            str(duration),
+        )
+
+    async def swipe_from_coordinate(
+        self, x: int, y: int, direction: SwipeDirection, distance: Optional[int] = None
+    ) -> None:
+        """특정 좌표에서 시작하는 방향 스와이프를 수행합니다."""
+        screen_size = await self.get_screen_size()
+        default_distance_y = int(screen_size.height * 0.30)
+        default_distance_x = int(screen_size.width * 0.30)
+        swipe_distance_y = distance or default_distance_y
+        swipe_distance_x = distance or default_distance_x
+
+        x0 = x1 = int(x)
+        y0 = y1 = int(y)
+
+        if direction == "up":
+            y1 = max(0, y0 - swipe_distance_y)
+        elif direction == "down":
+            y1 = min(screen_size.height, y0 + swipe_distance_y)
+        elif direction == "left":
+            x1 = max(0, x0 - swipe_distance_x)
+        elif direction == "right":
+            x1 = min(screen_size.width, x0 + swipe_distance_x)
+        else:
+            raise ActionableError(f'스와이프 방향 "{direction}"은 지원되지 않습니다')
+
+        self.adb("shell", "input", "swipe", str(x0), str(y0), str(x1), str(y1), "1000")
+
     async def get_screenshot(self) -> bytes:
         """스크린샷을 가져옵니다."""
         return self.adb("exec-out", "screencap", "-p")
@@ -254,25 +306,81 @@ class AndroidRobot(Robot):
 
     async def open_url(self, url: str) -> None:
         """URL을 엽니다."""
-        self.adb("shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url)
+        self.adb(
+            "shell",
+            "am",
+            "start",
+            "-a",
+            "android.intent.action.VIEW",
+            "-d",
+            self._escape_shell_text(url),
+        )
+
+    def _is_ascii(self, text: str) -> bool:
+        return all(ord(ch) < 128 for ch in text)
+
+    def _escape_shell_text(self, text: str) -> str:
+        escape_chars = ['\\', "'", '"', "`", " ", "\t", "\n", "\r", "|", "&", ";", "(", ")", "<", ">", "{", "}", "[", "]", "$", "*", "?"]
+        escaped = text
+        for ch in escape_chars:
+            escaped = escaped.replace(ch, f"\\{ch}")
+        return escaped
+
+    async def _list_packages(self) -> List[str]:
+        output = self.adb("shell", "pm", "list", "packages").decode("utf-8")
+        packages = []
+        for line in output.split("\n"):
+            line = line.strip()
+            if line.startswith("package:"):
+                packages.append(line[len("package:") :])
+        return packages
+
+    async def _is_devicekit_installed(self) -> bool:
+        packages = await self._list_packages()
+        return "com.mobilenext.devicekit" in packages
 
     async def send_keys(self, text: str) -> None:
         """키 입력을 전송합니다."""
+        if text == "":
+            return
+
         # 기본 입력 방식은 `adb shell input text` 명령을 사용합니다.
         # 이 방식은 ASCII 문자에만 제대로 동작하므로,
         # 비 ASCII 문자가 포함된 경우 Appium UnicodeIME를 이용해
         # 브로드캐스트 방식으로 입력을 전달합니다.
 
-        def is_ascii(s: str) -> bool:
-            try:
-                s.encode("ascii")
-                return True
-            except UnicodeEncodeError:
-                return False
-
-        if is_ascii(text):
-            escaped_text = text.replace(" ", "\\ ")
+        if self._is_ascii(text):
+            escaped_text = self._escape_shell_text(text)
             self.adb("shell", "input", "text", escaped_text)
+            return
+
+        if await self._is_devicekit_installed():
+            base64_text = base64.b64encode(text.encode("utf-8")).decode("ascii")
+            self.adb(
+                "shell",
+                "am",
+                "broadcast",
+                "-a",
+                "devicekit.clipboard.set",
+                "-e",
+                "encoding",
+                "base64",
+                "-e",
+                "text",
+                base64_text,
+                "-n",
+                "com.mobilenext.devicekit/.ClipboardBroadcastReceiver",
+            )
+            self.adb("shell", "input", "keyevent", "KEYCODE_PASTE")
+            self.adb(
+                "shell",
+                "am",
+                "broadcast",
+                "-a",
+                "devicekit.clipboard.clear",
+                "-n",
+                "com.mobilenext.devicekit/.ClipboardBroadcastReceiver",
+            )
             return
 
         # UnicodeIME 사용을 위해 IME를 설정하고 브로드캐스트 전송
@@ -292,6 +400,19 @@ class AndroidRobot(Robot):
             "msg",
             text,
         )
+
+    async def clear_focused_input(self) -> None:
+        """포커스된 입력값을 지웁니다."""
+        try:
+            self.adb("shell", "input", "keyevent", "KEYCODE_MOVE_END")
+            for _ in range(80):
+                self.adb("shell", "input", "keyevent", "KEYCODE_DEL")
+
+            self.adb("shell", "input", "keyevent", "KEYCODE_MOVE_HOME")
+            for _ in range(80):
+                self.adb("shell", "input", "keyevent", "KEYCODE_FORWARD_DEL")
+        except subprocess.CalledProcessError as exc:
+            raise ActionableError(f"입력값 삭제에 실패했습니다: {exc}") from exc
 
     async def press_button(self, button: Button) -> None:
         """버튼을 누릅니다."""
@@ -379,6 +500,42 @@ class AndroidDeviceManager:
 
         return "mobile"
 
+    def _get_device_version(self, device_id: str) -> str:
+        try:
+            output = subprocess.run(
+                [get_adb_path(), "-s", device_id, "shell", "getprop", "ro.build.version.release"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            )
+            return output.stdout.strip() or "unknown"
+        except Exception:
+            return "unknown"
+
+    def _get_device_name(self, device_id: str) -> str:
+        try:
+            avd_name = subprocess.run(
+                [get_adb_path(), "-s", device_id, "shell", "getprop", "ro.boot.qemu.avd_name"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            ).stdout.strip()
+            if avd_name:
+                return avd_name.replace("_", " ")
+
+            model = subprocess.run(
+                [get_adb_path(), "-s", device_id, "shell", "getprop", "ro.product.model"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            ).stdout.strip()
+            return model or device_id
+        except Exception:
+            return device_id
+
     def get_connected_devices(self) -> List[AndroidDevice]:
         """연결된 디바이스 목록을 가져옵니다."""
         try:
@@ -390,11 +547,16 @@ class AndroidDeviceManager:
             for line in result.stdout.split("\n"):
                 if line and not line.startswith("List of devices attached"):
                     parts = line.split("\t")
-                    if parts and parts[0]:
+                    if len(parts) >= 2 and parts[0] and parts[1].strip() == "device":
                         device_id = parts[0]
+                        is_emulator = device_id.startswith("emulator-")
                         devices.append(
                             AndroidDevice(
-                                device_id=device_id, device_type=self._get_device_type(device_id)
+                                device_id=device_id,
+                                device_type=self._get_device_type(device_id),
+                                device_name=self._get_device_name(device_id),
+                                os_version=self._get_device_version(device_id),
+                                connection_type="emulator" if is_emulator else "real",
                             )
                         )
 

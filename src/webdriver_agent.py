@@ -1,4 +1,5 @@
 import json
+import base64
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
@@ -119,6 +120,35 @@ class WebDriverAgent:
                 await session.post(url, json={"value": [keys]})
 
         await self.within_session(_send)
+
+    async def clear_focused_input(self) -> None:
+        """현재 포커스된 입력 요소를 비웁니다."""
+
+        async def _clear(session_url: str) -> None:
+            active_url = f"{session_url}/element/active"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(active_url) as active_response:
+                    active_data = await active_response.json()
+
+                active_value = active_data.get("value")
+                if not isinstance(active_value, dict):
+                    raise ActionableError("활성 입력 요소를 찾을 수 없습니다.")
+
+                element_id = (
+                    active_value.get("ELEMENT")
+                    or active_value.get("element-6066-11e4-a52e-4f735466cecf")
+                    or active_value.get("elementId")
+                )
+                if not element_id:
+                    raise ActionableError("활성 입력 요소를 찾을 수 없습니다.")
+
+                clear_url = f"{session_url}/element/{element_id}/clear"
+                async with session.post(clear_url) as clear_response:
+                    if clear_response.status >= 400:
+                        body = await clear_response.text()
+                        raise ActionableError(f"입력값 삭제 실패: {body}")
+
+        await self.within_session(_clear)
 
     async def press_button(self, button: str) -> None:
         """버튼을 누릅니다."""
@@ -265,6 +295,14 @@ class WebDriverAgent:
 
         await self.within_session(_open)
 
+    async def get_screenshot(self) -> bytes:
+        """스크린샷을 가져옵니다."""
+        url = f"{self.base_url}/screenshot"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                data = await response.json()
+                return base64.b64decode(data["value"])
+
     async def swipe(self, direction: SwipeDirection) -> None:
         """스와이프합니다."""
         screen_size = await self.get_screen_size()
@@ -353,6 +391,76 @@ class WebDriverAgent:
                 await session.post(url, json=actions)
 
         await self.within_session(_swipe)
+
+    async def swipe_from_coordinate(
+        self, x: int, y: int, direction: SwipeDirection, distance: Optional[int] = 400
+    ) -> None:
+        """특정 좌표에서 시작하는 방향 스와이프를 수행합니다."""
+        swipe_distance = distance or 400
+        x0 = x
+        y0 = y
+        x1 = x
+        y1 = y
+
+        if direction == "up":
+            y1 = y - swipe_distance
+        elif direction == "down":
+            y1 = y + swipe_distance
+        elif direction == "left":
+            x1 = x - swipe_distance
+        elif direction == "right":
+            x1 = x + swipe_distance
+        else:
+            raise ActionableError(f'스와이프 방향 "{direction}"은 지원되지 않습니다')
+
+        await self.swipe_between_points(x0, y0, x1, y1)
+
+    async def drag_between_points(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        hold_ms: Optional[int] = None,
+        move_ms: Optional[int] = None,
+    ) -> None:
+        """지정된 좌표 간 드래그를 수행합니다."""
+        hold_duration = max(0, int(hold_ms or 250))
+        move_duration = max(100, int(move_ms or 850))
+
+        async def _drag(session_url: str) -> None:
+            url = f"{session_url}/actions"
+            actions = {
+                "actions": [
+                    {
+                        "type": "pointer",
+                        "id": "finger1",
+                        "parameters": {"pointerType": "touch"},
+                        "actions": [
+                            {
+                                "type": "pointerMove",
+                                "duration": 0,
+                                "x": start_x,
+                                "y": start_y,
+                            },
+                            {"type": "pointerDown", "button": 0},
+                            {"type": "pause", "duration": hold_duration},
+                            {
+                                "type": "pointerMove",
+                                "duration": move_duration,
+                                "x": end_x,
+                                "y": end_y,
+                            },
+                            {"type": "pointerUp", "button": 0},
+                        ],
+                    }
+                ]
+            }
+
+            async with aiohttp.ClientSession() as session:
+                await session.post(url, json=actions)
+
+        await self.within_session(_drag)
 
     async def set_orientation(self, orientation: Orientation) -> None:
         """화면 방향을 설정합니다."""
